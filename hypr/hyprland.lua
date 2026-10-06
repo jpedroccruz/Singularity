@@ -1,0 +1,12 @@
+-- Sourcing files
+require("modules/monitors")
+require("modules/programs")
+require("modules/autostart")
+require("modules/env")
+require("modules/permissions")
+require("modules/decorations")
+require("modules/animations")
+require("modules/misc")
+require("modules/input")
+require("modules/keybindings")
+require("modules/windows-and-workspaces")
