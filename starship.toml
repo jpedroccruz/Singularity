@@ -1,0 +1,48 @@
+format = """
+$directory\
+$nodejs\
+$rust\
+$golang\
+$php\
+$fill\
+$time\
+\n$character"""
+
+[fill]
+symbol = " "
+
+[directory]
+style = "fg:#EBEBEC"
+format = "[$path ]($style)"
+truncation_length = 100
+truncate_to_repo = false
+
+[nodejs]
+symbol = ""
+style = "fg:#EBEBEC"
+format = '[ $symbol $version ]($style)'
+
+[rust]
+symbol = ""
+style = "fg:#EBEBEC"
+format = '[ $symbol $version ]($style)'
+
+[golang]
+symbol = ""
+style = "fg:#EBEBEC"
+format = '[ $symbol $version ]($style)'
+
+[php]
+symbol = ""
+style = "fg:#EBEBEC"
+format = '[ $symbol $version ]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "fg:#EBEBEC"
+format = '[ $time]($style)'
+
+[character]
+success_symbol = "[➜](fg:#EBEBEC)"
+error_symbol = "[➜](fg:red)"
