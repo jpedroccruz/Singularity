@@ -68,6 +68,9 @@ Rectangle {
   property real phaseProgress: 0
   readonly property int speedDuration: 10   // segundos por fase
 
+  // ID do servidor Ookla (veja `speedtest -L`). Vazio = o mais próximo.
+  property string speedServerId: "22472"
+
   // Fonte dos números do teste de velocidade. Qualquer fonte instalada
   // funciona; as condensadas ("Oswald", "Barlow Condensed") ficam parecidas
   // com os testes clássicos.
@@ -475,7 +478,8 @@ Rectangle {
     root.speedPhase = "starting"
 
     speedProcess.command = [
-      "sh", "-c", speedScript, "sh", root.device, String(root.speedDuration)
+      "sh", "-c", speedScript, "sh", root.device,
+      String(root.speedDuration), root.speedServerId
     ]
     speedProcess.running = true
   }
@@ -508,7 +512,58 @@ Rectangle {
       root.ulLive = root.ulLive * 0.6 + inst * 0.4
   }
 
+  // Saída do Speedtest CLI da Ookla (-f jsonl): uma linha JSON por evento.
+  function onOoklaLine(line) {
+    let ev
+
+    try {
+      ev = JSON.parse(line)
+    } catch (e) {
+      return
+    }
+
+    // "bandwidth" vem em bytes por segundo
+    const mbps = o => (o && o.bandwidth) ? o.bandwidth * 8 / 1000000 : 0
+
+    if (ev.type === "download" && ev.download) {
+      if (root.speedPhase !== "download") {
+        root.phaseStart = Date.now()
+        root.speedPhase = "download"
+      }
+
+      root.dlLive = mbps(ev.download)
+    } else if (ev.type === "upload" && ev.upload) {
+      if (root.speedPhase !== "upload") {
+        root.dlFinal = root.dlLive
+        root.phaseStart = Date.now()
+        root.speedPhase = "upload"
+      }
+
+      root.ulLive = mbps(ev.upload)
+    } else if (ev.type === "result") {
+      if (ev.download) {
+        root.dlFinal = mbps(ev.download)
+        root.dlLive = root.dlFinal
+      }
+
+      if (ev.upload) {
+        root.ulFinal = mbps(ev.upload)
+        root.ulLive = root.ulFinal
+      }
+
+      root.speedPhase = "done"
+    } else if (ev.type === "log" && ev.level === "error") {
+      root.speedError = (ev.message || "").toUpperCase().slice(0, 60)
+      root.speedPhase = "error"
+    }
+  }
+
   function onSpeedLine(line) {
+    if (line.trim().charAt(0) === "{") {
+      root.onOoklaLine(line)
+      return
+    }
+
     const p = line.trim().split(" ")
 
     if (p[0] === "PHASE_D") {
@@ -530,7 +585,13 @@ Rectangle {
       root.ulLive = root.ulFinal
       root.speedPhase = "done"
     } else if (p[0] === "ERR") {
-      root.speedError = p[1] ? "HTTP " + p[1] : ""
+      const c = p[1] || ""
+
+      root.speedError = c === "000" ? "SEM RESPOSTA"
+        : c === "iface" ? "INTERFACE NÃO ENCONTRADA"
+        : c === "curl" ? "CURL NÃO INSTALADO"
+        : c !== "" ? "HTTP " + c : ""
+
       root.speedPhase = "error"
     }
   }
@@ -586,30 +647,70 @@ rm -f /tmp/qs-wifi-qr.png
 qrencode -s 6 -m 2 -o /tmp/qs-wifi-qr.png "$data"
 `
 
-  // Mede a vazão lendo os contadores da interface a cada ~250 ms
-  // enquanto 4 conexões paralelas baixam / enviam dados (Cloudflare).
-  // Saída: PHASE_D, "D bytes ns", PHASE_U, "U bytes ns", DONE.
+  // Mede a vazão do teste de velocidade.
+  //  - Com o Speedtest CLI da Ookla instalado: usa o servidor mais próximo e
+  //    imprime uma linha JSON por evento (lida em onOoklaLine).
+  //  - Sem ele: mede lendo os contadores da interface a cada ~250 ms enquanto
+  //    6 conexões paralelas baixam / enviam dados (Cloudflare).
+  // Saída da alternativa: PHASE_D, "D bytes ns", PHASE_U, "U bytes ns", DONE
+  // ou "ERR motivo".
   readonly property string speedScript: `
 dev="$1"
 dur="$2"
+srv="$3"
 [ -z "$dur" ] && dur=10
+
+# 1) Speedtest CLI da Ookla: escolhe o servidor mais próximo e mede igual ao
+#    speedtest.net. Com "srv" fixa um servidor específico (veja speedtest -L).
+if command -v speedtest >/dev/null 2>&1 && speedtest --version 2>&1 | grep -qi ookla; then
+  if [ -n "$srv" ]; then
+    exec speedtest --accept-license --accept-gdpr -f jsonl -s "$srv" 2>&1
+  fi
+  exec speedtest --accept-license --accept-gdpr -f jsonl 2>&1
+fi
+
+# 2) Alternativa: Cloudflare
 rxf="/sys/class/net/$dev/statistics/rx_bytes"
 txf="/sys/class/net/$dev/statistics/tx_bytes"
-[ -n "$dev" ] && [ -r "$rxf" ] || { echo ERR; exit 1; }
+[ -n "$dev" ] && [ -r "$rxf" ] || { echo "ERR iface"; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "ERR curl"; exit 1; }
 
-# teste prévio: confirma que o servidor responde antes de medir
-code=$(curl -s -o /dev/null --connect-timeout 5 --max-time 3 -w "%{http_code}" "https://speed.cloudflare.com/__down?bytes=200000000")
+UA="Mozilla/5.0 (X11; Linux x86_64)"
+BASE="https://speed.cloudflare.com"
+tag="qsst$$"
+
+# teste prévio leve: confirma que o servidor responde antes de medir
+code=$(curl -s -A "$UA" -o /dev/null --connect-timeout 5 --max-time 8 -w "%{http_code}" "$BASE/__down?bytes=1000")
 [ "$code" = 200 ] || { echo "ERR $code"; exit 1; }
 
 tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
 head -c 25000000 /dev/zero > "$tmp"
+
+cleanup() {
+  pkill -f "$tag" 2>/dev/null
+  rm -f "$tmp"
+}
+trap 'cleanup; exit 1' TERM INT
+
+# Os trabalhadores têm prazo próprio ($1): se o script for morto à força,
+# eles terminam sozinhos em poucos segundos em vez de ficarem em loop.
+down_worker() {
+  while [ "$(date +%s%N)" -lt "$1" ]; do
+    curl -s -A "$UA" -o /dev/null --connect-timeout 5 --max-time $((dur + 2)) "$BASE/__down?bytes=100000000&t=$tag" || sleep 0.3
+  done
+}
+
+up_worker() {
+  while [ "$(date +%s%N)" -lt "$1" ]; do
+    curl -s -A "$UA" -o /dev/null --connect-timeout 5 --max-time $((dur + 2)) -X POST --data-binary @"$tmp" "$BASE/__up?t=$tag" || sleep 0.3
+  done
+}
 
 measure() {
   prev=$(cat "$1")
   pt=$(date +%s%N)
   end=$((pt + dur * 1000000000))
-  while [ "$(date +%s%N)" -lt "$end" ]; do
+  while [ "$pt" -lt "$end" ]; do
     sleep 0.25
     cur=$(cat "$1")
     ct=$(date +%s%N)
@@ -619,20 +720,33 @@ measure() {
   done
 }
 
+stop_workers() {
+  kill $pids 2>/dev/null
+  pkill -f "$tag" 2>/dev/null
+  wait $pids 2>/dev/null
+}
+
 echo PHASE_D
+deadline=$(( $(date +%s%N) + (dur + 1) * 1000000000 ))
+pids=""
 for k in 1 2 3 4 5 6; do
-  timeout "$dur" sh -c 'while :; do curl -sf -o /dev/null --connect-timeout 5 --max-time 20 "https://speed.cloudflare.com/__down?bytes=200000000" || sleep 1; done' &
+  down_worker "$deadline" &
+  pids="$pids $!"
 done
 measure "$rxf" D
-wait
+stop_workers
 
 echo PHASE_U
+deadline=$(( $(date +%s%N) + (dur + 1) * 1000000000 ))
+pids=""
 for k in 1 2 3 4 5 6; do
-  timeout "$dur" sh -c 'while :; do curl -sf -o /dev/null --connect-timeout 5 --max-time 20 -X POST --data-binary @"$0" "https://speed.cloudflare.com/__up" || sleep 1; done' "$tmp" &
+  up_worker "$deadline" &
+  pids="$pids $!"
 done
 measure "$txf" U
-wait
+stop_workers
 
+cleanup
 echo DONE
 `
 
@@ -1091,8 +1205,10 @@ echo DONE
 
   // ---------- janela do teste de velocidade ----------
   //
+  // Minimalista: só os dois velocímetros (Download e Upload), sem cartão.
+  // Esc ou clique fora fecha. Clique no centro refaz o teste (quando parado).
   // Para o blur, o compositor precisa de uma regra para o namespace
-  // "speedtest" (veja o exemplo de Hyprland na mensagem).
+  // "speedtest".
 
   PanelWindow {
     id: overlay
@@ -1113,7 +1229,7 @@ echo DONE
     }
 
     readonly property real gaugeSize: Math.max(
-      220, Math.min((width - 260) / 2, height * 0.5, 480)
+      220, Math.min((width - 220) / 2, height * 0.55, 440)
     )
 
     onVisibleChanged: {
@@ -1136,146 +1252,48 @@ echo DONE
         duration: 180
       }
 
+      // escurece a tela atrás dos medidores
       Rectangle {
         anchors.fill: parent
         color: Qt.alpha(root.panelColor, 0.55)
       }
 
-      // impede cliques de passarem para as janelas de trás
+      // clicar fora fecha
       MouseArea {
         anchors.fill: parent
+        onClicked: root.closeSpeedTest()
       }
 
-      Rectangle {
+      Item {
         id: card
         anchors.centerIn: parent
         implicitWidth: cardContent.implicitWidth + 80
-        implicitHeight: cardContent.implicitHeight + 72
-        radius: 20
-        color: Qt.alpha(root.panelColor, 0.84)
-        border.width: 2
-        border.color: root.iconColor
+        implicitHeight: cardContent.implicitHeight + 64
+
+        // clicar nos medidores refaz o teste (se não estiver rodando)
+        MouseArea {
+          anchors.fill: parent
+          onClicked: {
+            if (!speedProcess.running) root.startSpeedTest()
+          }
+        }
 
         ColumnLayout {
           id: cardContent
           anchors.fill: parent
           anchors.leftMargin: 40
           anchors.rightMargin: 40
-          anchors.topMargin: 34
-          anchors.bottomMargin: 34
-          spacing: 26
+          anchors.topMargin: 32
+          anchors.bottomMargin: 32
+          spacing: 18
 
-          // cabeçalho
-          RowLayout {
-            Layout.fillWidth: true
-            spacing: 14
-
-            Rectangle {
-              implicitWidth: 46
-              implicitHeight: 46
-              radius: 10
-              color: root.selectorColor
-              border.width: 1
-              border.color: root.borderColor
-
-              Text {
-                anchors.centerIn: parent
-                text: "speed"
-                color: root.iconColor
-                font.family: "Material Symbols Rounded"
-                font.pixelSize: 26
-              }
-            }
-
-            ColumnLayout {
-              spacing: 3
-
-              Text {
-                text: "Teste de velocidade"
-                color: root.iconColor
-                font.family: "Rubik"
-                font.pixelSize: 22
-                font.bold: true
-              }
-
-              RowLayout {
-                spacing: 8
-
-                Rectangle {
-                  id: statusDot
-                  implicitWidth: 8
-                  implicitHeight: 8
-                  radius: 4
-                  color: root.speedPhase === "error"
-                    ? root.mutedColor : root.iconColor
-
-                  SequentialAnimation on opacity {
-                    running: speedProcess.running
-                    loops: Animation.Infinite
-
-                    NumberAnimation { to: 0.25; duration: 600 }
-                    NumberAnimation { to: 1; duration: 600 }
-
-                    onRunningChanged: {
-                      if (!running) statusDot.opacity = 1
-                    }
-                  }
-                }
-
-                Text {
-                  text: root.speedStatus()
-                  color: root.mutedColor
-                  font.family: "Rubik"
-                  font.pixelSize: 12
-                  font.letterSpacing: 1.5
-                }
-              }
-            }
-
-            Item {
-              Layout.fillWidth: true
-            }
-
-            Rectangle {
-              implicitWidth: 42
-              implicitHeight: 42
-              radius: 8
-              color: root.selectorColor
-              border.width: 1
-              border.color: closeMouse.containsMouse
-                ? root.iconColor : root.borderColor
-
-              Text {
-                anchors.centerIn: parent
-                text: "close"
-                color: root.iconColor
-                font.family: "Material Symbols Rounded"
-                font.pixelSize: 22
-              }
-
-              MouseArea {
-                id: closeMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.closeSpeedTest()
-              }
-            }
-          }
-
-          Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: root.borderColor
-          }
-
-          // medidores
           RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 56
 
+            // DOWNLOAD
             ColumnLayout {
-              spacing: 10
+              spacing: 14
 
               RowLayout {
                 Layout.alignment: Qt.AlignHCenter
@@ -1283,38 +1301,19 @@ echo DONE
 
                 Text {
                   text: "arrow_downward"
-                  color: root.speedPhase === "download"
+                  color: (root.speedPhase === "download" || root.speedPhase === "done")
                     ? root.iconColor : root.mutedColor
                   font.family: "Material Symbols Rounded"
-                  font.pixelSize: 20
+                  font.pixelSize: 22
                 }
 
                 Text {
                   text: "Download"
-                  color: root.speedPhase === "download"
+                  color: (root.speedPhase === "download" || root.speedPhase === "done")
                     ? root.iconColor : root.mutedColor
                   font.family: "Rubik"
-                  font.pixelSize: 17
+                  font.pixelSize: 18
                   font.bold: true
-                }
-              }
-
-              Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: overlay.gaugeSize * 0.7
-                implicitHeight: 4
-                radius: 2
-                color: root.selectorColor
-
-                Rectangle {
-                  height: parent.height
-                  radius: 2
-                  color: root.iconColor
-                  width: parent.width * (
-                    root.speedPhase === "download" ? root.phaseProgress
-                    : (root.speedPhase === "upload"
-                       || root.speedPhase === "done") ? 1 : 0
-                  )
                 }
               }
 
@@ -1332,8 +1331,9 @@ echo DONE
               }
             }
 
+            // UPLOAD
             ColumnLayout {
-              spacing: 10
+              spacing: 14
 
               RowLayout {
                 Layout.alignment: Qt.AlignHCenter
@@ -1341,37 +1341,19 @@ echo DONE
 
                 Text {
                   text: "arrow_upward"
-                  color: root.speedPhase === "upload"
+                  color: (root.speedPhase === "upload" || root.speedPhase === "done")
                     ? root.iconColor : root.mutedColor
                   font.family: "Material Symbols Rounded"
-                  font.pixelSize: 20
+                  font.pixelSize: 22
                 }
 
                 Text {
                   text: "Upload"
-                  color: root.speedPhase === "upload"
+                  color: (root.speedPhase === "upload" || root.speedPhase === "done")
                     ? root.iconColor : root.mutedColor
                   font.family: "Rubik"
-                  font.pixelSize: 17
+                  font.pixelSize: 18
                   font.bold: true
-                }
-              }
-
-              Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: overlay.gaugeSize * 0.7
-                implicitHeight: 4
-                radius: 2
-                color: root.selectorColor
-
-                Rectangle {
-                  height: parent.height
-                  radius: 2
-                  color: root.iconColor
-                  width: parent.width * (
-                    root.speedPhase === "upload" ? root.phaseProgress
-                    : root.speedPhase === "done" ? 1 : 0
-                  )
                 }
               }
 
@@ -1390,148 +1372,15 @@ echo DONE
             }
           }
 
-          Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: root.borderColor
-          }
-
-          // rodapé
-          RowLayout {
-            Layout.fillWidth: true
-            spacing: 28
-
-            ColumnLayout {
-              spacing: 2
-
-              Text {
-                text: "PING"
-                color: root.mutedColor
-                font.family: "Rubik"
-                font.pixelSize: 11
-                font.letterSpacing: 1
-              }
-
-              Text {
-                text: root.pingText
-                color: root.iconColor
-                font.family: root.numberFont
-                font.weight: Font.Medium
-                font.pixelSize: 20
-              }
-            }
-
-            ColumnLayout {
-              spacing: 2
-
-              Text {
-                text: "REDE"
-                color: root.mutedColor
-                font.family: "Rubik"
-                font.pixelSize: 11
-                font.letterSpacing: 1
-              }
-
-              Text {
-                text: root.title
-                color: root.iconColor
-                font.family: "Rubik"
-                font.pixelSize: 16
-              }
-            }
-
-            ColumnLayout {
-              spacing: 2
-
-              Text {
-                text: "SERVIDOR"
-                color: root.mutedColor
-                font.family: "Rubik"
-                font.pixelSize: 11
-                font.letterSpacing: 1
-              }
-
-              Text {
-                text: "Cloudflare"
-                color: root.iconColor
-                font.family: "Rubik"
-                font.pixelSize: 16
-              }
-            }
-
-            Item {
-              Layout.fillWidth: true
-            }
-
-            Rectangle {
-              implicitWidth: 160
-              implicitHeight: 44
-              radius: 8
-              color: speedProcess.running
-                ? root.selectorColor
-                : (againMouse.containsMouse ? Qt.lighter(root.iconColor, 1.12)
-                                            : root.iconColor)
-              border.width: 1
-              border.color: speedProcess.running
-                ? root.borderColor : root.iconColor
-
-              RowLayout {
-                anchors.centerIn: parent
-                spacing: 8
-
-                Text {
-                  text: speedProcess.running ? "hourglass_top" : "refresh"
-                  color: speedProcess.running
-                    ? root.iconColor : root.panelColor
-                  font.family: "Material Symbols Rounded"
-                  font.pixelSize: 20
-                }
-
-                Text {
-                  text: speedProcess.running ? "Testando..." : "Refazer teste"
-                  color: speedProcess.running
-                    ? root.iconColor : root.panelColor
-                  font.family: "Rubik"
-                  font.pixelSize: 14
-                  font.bold: true
-                }
-              }
-
-              MouseArea {
-                id: againMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                enabled: !speedProcess.running
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.startSpeedTest()
-              }
-            }
-
-            Rectangle {
-              implicitWidth: 110
-              implicitHeight: 44
-              radius: 8
-              color: closeBtnMouse.containsMouse
-                ? root.borderColor : "transparent"
-              border.width: 1
-              border.color: root.borderColor
-
-              Text {
-                anchors.centerIn: parent
-                text: "Fechar"
-                color: root.iconColor
-                font.family: "Rubik"
-                font.pixelSize: 14
-              }
-
-              MouseArea {
-                id: closeBtnMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.closeSpeedTest()
-              }
-            }
+          // aparece só se o teste falhar
+          Text {
+            visible: root.speedPhase === "error"
+            Layout.alignment: Qt.AlignHCenter
+            text: root.speedStatus() + "  ·  CLIQUE PARA TENTAR DE NOVO"
+            color: root.mutedColor
+            font.family: "Rubik"
+            font.pixelSize: 12
+            font.letterSpacing: 1.5
           }
         }
       }
