@@ -1,4 +1,3 @@
-
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
@@ -18,8 +17,6 @@ Rectangle {
   property color menuColor: "#211711"
   property color borderColor: "#493025"
 
-  // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
-  // curvam para dentro da barra, como se o popup fosse parte dela.
   property int edge: 20
 
   property var sink: Pipewire.defaultAudioSink
@@ -41,6 +38,12 @@ Rectangle {
 
   property real volume: sink ? sink.audio.volume : 0
   property bool muted: !sink || sink.audio.muted
+
+  // Nível real do sinal captado pelo microfone.
+  // PwNodePeakMonitor retorna valores entre 0.0 e 1.0.
+  property real microphonePeak: inputPeakMonitor.peak
+
+  property bool microphoneHasSignal: microphonePeak > 0.015
 
   function volumeSymbol() {
     if (muted || volume <= 0) return "volume_off"
@@ -167,6 +170,14 @@ Rectangle {
     )
   }
 
+  // Monitor nativo do PipeWire integrado ao Quickshell.
+  PwNodePeakMonitor {
+    id: inputPeakMonitor
+
+    node: root.source
+    enabled: popup.visible && !!root.source
+  }
+
   Process {
     id: outputPortsProcess
     command: ["pactl", "list", "sinks"]
@@ -261,7 +272,6 @@ Rectangle {
   PanelWindow {
     id: popup
 
-    // janela layer-shell colada na direita da tela, logo abaixo da barra
     screen: root.QsWindow.window.screen
     anchors {
       top: true
@@ -915,6 +925,53 @@ Rectangle {
               color: root.iconColor
               font.family: "Rubik"
               font.pixelSize: 13
+            }
+          }
+
+          // MEDIDOR DE SINAL DO MICROFONE
+
+          ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 7
+
+            RowLayout {
+              Layout.fillWidth: true
+
+              Item {
+                Layout.fillWidth: true
+              }
+            }
+
+            Rectangle {
+              Layout.fillWidth: true
+              implicitHeight: 7
+
+              radius: 3.5
+              color: root.selectorColor
+              clip: true
+
+              Rectangle {
+                width: parent.width * Math.max(
+                  0,
+                  Math.min(1, root.microphonePeak)
+                )
+
+                height: parent.height
+                radius: parent.radius
+
+                color: root.source && root.source.audio.muted
+                  ? root.mutedColor
+                  : root.microphonePeak > 0.85
+                    ? "#FF6659"
+                    : root.iconColor
+
+                Behavior on width {
+                  NumberAnimation {
+                    duration: 70
+                    easing.type: Easing.OutCubic
+                  }
+                }
+              }
             }
           }
         }
