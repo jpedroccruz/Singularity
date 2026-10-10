@@ -5,17 +5,28 @@
 local mainMod = "SUPER" -- Sets "Windows" key as main modifier
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
-hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
 local closeWindowBind = hl.bind(mainMod .. " + C", hl.dsp.window.close())
 -- closeWindowBind:set_enabled(false)
+
+-- programs
+hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
-hl.bind(mainMod .. " + V", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + SPACE", hl.dsp.exec_cmd(menu))
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(browser))
 hl.bind("CTRL + SHIFT + ESCAPE", hl.dsp.exec_cmd(terminal .. " " .. system_info))
-hl.bind(mainMod .. " + P", hl.dsp.window.pseudo())
-hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))    -- dwindle only
 hl.bind("SUPER + TAB", hl.dsp.exec_cmd("qs ipc -c overview call overview toggle"))
+
+-- screenshot
+hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m output -n --raw | satty --filename -"))
+hl.bind("SHIFT + Print", hl.dsp.exec_cmd("hyprshot -m region -n --raw | satty --filename -"))
+hl.bind("CTRL + Print", hl.dsp.exec_cmd("hyprshot -m window -n --raw | satty --filename -"))
+
+-- window view
+hl.bind(mainMod .. " + D", hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mainMod .. "+ SHIFT + D", hl.dsp.window.pseudo())
+hl.bind(mainMod .. " + CTRL + D", hl.dsp.layout("togglesplit"))    -- dwindle only
+hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ action = "toggle" }))
+hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" }))
 
 -- Move focus with mainMod + arrow keys
 hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }))
