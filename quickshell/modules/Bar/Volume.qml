@@ -1,3 +1,4 @@
+
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
@@ -40,6 +41,13 @@ Rectangle {
     if (volume <= 0.33) return "volume_mute"
     if (volume <= 0.66) return "volume_down"
     return "volume_up"
+  }
+
+  function selectorMenuOpen() {
+    return outputSelector.popup.visible
+      || outputPortSelector.popup.visible
+      || inputSelector.popup.visible
+      || inputPortSelector.popup.visible
   }
 
   function parsePorts(text, kind) {
@@ -198,8 +206,13 @@ Rectangle {
     interval: 180
 
     onTriggered: {
-      if (!mouseArea.containsMouse && !panelHover.hovered)
+      if (
+        !mouseArea.containsMouse
+        && !panelHover.hovered
+        && !root.selectorMenuOpen()
+      ) {
         popup.visible = false
+      }
     }
   }
 
@@ -229,7 +242,6 @@ Rectangle {
     cursorShape: Qt.PointingHandCursor
 
     onEntered: closeTimer.stop()
-
     onExited: closeTimer.restart()
 
     onClicked: {
@@ -352,6 +364,13 @@ Rectangle {
               width: outputSelector.width
               padding: 4
 
+              onAboutToShow: closeTimer.stop()
+
+              onClosed: {
+                if (!mouseArea.containsMouse && !panelHover.hovered)
+                  closeTimer.restart()
+              }
+
               background: Rectangle {
                 color: root.panelColor
                 border.width: 1
@@ -447,6 +466,13 @@ Rectangle {
               y: outputPortSelector.height + 4
               width: outputPortSelector.width
               padding: 4
+
+              onAboutToShow: closeTimer.stop()
+
+              onClosed: {
+                if (!mouseArea.containsMouse && !panelHover.hovered)
+                  closeTimer.restart()
+              }
 
               background: Rectangle {
                 color: root.panelColor
@@ -635,6 +661,13 @@ Rectangle {
               width: inputSelector.width
               padding: 4
 
+              onAboutToShow: closeTimer.stop()
+
+              onClosed: {
+                if (!mouseArea.containsMouse && !panelHover.hovered)
+                  closeTimer.restart()
+              }
+
               background: Rectangle {
                 color: root.panelColor
                 border.width: 1
@@ -730,6 +763,13 @@ Rectangle {
               y: inputPortSelector.height + 4
               width: inputPortSelector.width
               padding: 4
+
+              onAboutToShow: closeTimer.stop()
+
+              onClosed: {
+                if (!mouseArea.containsMouse && !panelHover.hovered)
+                  closeTimer.restart()
+              }
 
               background: Rectangle {
                 color: root.panelColor
