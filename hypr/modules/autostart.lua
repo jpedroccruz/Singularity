@@ -8,7 +8,9 @@
 -- Or execute your favorite apps at launch like this:
 
 hl.on("hyprland.start", function () 
+  hl.exec_cmd("qs")
   hl.exec_cmd("qs -c overview")
+  hl.exec_cmd("awww-daemon")
 --   hl.exec_cmd(terminal)
 --   hl.exec_cmd("nm-applet")
 --   hl.exec_cmd("waybar & hyprpaper & firefox")

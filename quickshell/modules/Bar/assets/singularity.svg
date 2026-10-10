@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="60" viewBox="0 0 64 60" fill="none">
+  <defs>
+    <filter id="orangeGlow" x="-50%" y="-70%" width="200%" height="240%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="3.0" result="blur"/>
+      <feFlood flood-color="#FFA376" flood-opacity="0.95" result="orange"/>
+      <feComposite in="orange" in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Hide the orbital streak wherever it passes behind the event horizon. -->
+    <mask id="orbitSidesOnly" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="60">
+      <rect width="64" height="60" fill="white"/>
+      <circle cx="32" cy="28" r="15.4" fill="black"/>
+    </mask>
+
+    <filter id="ringGlow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="3.4" result="blur"/>
+      <feFlood flood-color="#FFA376" flood-opacity="0.85" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Orbit is drawn first and is visible only on the left and right sides. -->
+  <g mask="url(#orbitSidesOnly)" transform="rotate(-19 32 28)" filter="url(#orangeGlow)">
+    <ellipse cx="32" cy="28" rx="28" ry="3.0" fill="#FFA376"/>
+    <path d="M4.2 28
+             C10.8 25.8 21.2 24.6 32 24.6
+             C42.8 24.6 53.2 25.8 59.8 28
+             C53.2 30.2 42.8 31.4 32 31.4
+             C21.2 31.4 10.8 30.2 4.2 28Z"
+          stroke="#FFA376" stroke-width="1.4"/>
+  </g>
+
+  <!-- Hollow ring: no fill, so its center remains fully transparent. -->
+  <g filter="url(#ringGlow)">
+    <circle cx="32" cy="28" r="15.5" stroke="#FFA376" stroke-width="2.2" fill="none"/>
+  </g>
+</svg>
