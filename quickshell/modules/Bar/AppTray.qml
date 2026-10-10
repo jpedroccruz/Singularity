@@ -1,14 +1,21 @@
 import Quickshell
+import Quickshell.Wayland
 import Quickshell.Io
 import Quickshell.Services.SystemTray
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 
 Rectangle {
   id: root
 
   property color iconColor: "#FFA376"
   property color mutedColor: "#765B50"
+  property color panelColor: "#17100B"
+
+  // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
+  // curvam para dentro da barra, como se o popup fosse parte dela.
+  property int edge: 20
   property var parentWindow
   property var contextItem
   color: "transparent"
@@ -70,33 +77,66 @@ Rectangle {
     }
   }
 
-  PopupWindow {
+  PanelWindow {
     id: popup
 
     property bool showingMenu: false
 
-    anchor.item: root
-    anchor.rect.x: root.width / 2 - implicitWidth / 2
-    anchor.rect.y: root.height + 6
-    implicitWidth: showingMenu
+    // janela layer-shell colada na direita da tela, logo abaixo da barra
+    screen: root.QsWindow.window.screen
+    anchors {
+      top: true
+      right: true
+    }
+    margins.top: root.QsWindow.window.height
+    exclusionMode: ExclusionMode.Ignore
+
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.namespace: "bar-popup"
+    implicitWidth: root.edge + (showingMenu
       ? Math.max(220, menuColumn.implicitWidth + 20)
-      : Math.max(180, trayLayout.implicitWidth + 20)
+      : Math.max(180, trayLayout.implicitWidth + 20))
     implicitHeight: showingMenu
       ? Math.max(48, trayLayout.implicitHeight + menuColumn.implicitHeight + 30)
       : Math.max(48, trayLayout.implicitHeight + 20)
     visible: false
     color: "transparent"
-    grabFocus: false
     onVisibleChanged: {
       if (!visible) showingMenu = false
     }
 
+    Shape {
+      anchors.left: parent.left
+      anchors.top: parent.top
+      width: root.edge
+      height: root.edge
+      preferredRendererType: Shape.CurveRenderer
+
+      ShapePath {
+        strokeWidth: 0
+        fillColor: root.panelColor
+        startX: root.edge
+        startY: 0
+
+        PathLine { x: root.edge; y: root.edge }
+        PathArc {
+          x: 0
+          y: 0
+          radiusX: root.edge
+          radiusY: root.edge
+          direction: PathArc.Counterclockwise
+        }
+        PathLine { x: root.edge; y: 0 }
+      }
+    }
+
     Rectangle {
+      id: panel
       anchors.fill: parent
-      color: "#17100B"
-      border.width: 2
-      border.color: root.iconColor
-      radius: 10
+      anchors.leftMargin: root.edge
+
+      color: root.panelColor
+      bottomLeftRadius: root.edge
 
       HoverHandler {
         id: trayHover

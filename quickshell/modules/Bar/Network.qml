@@ -4,6 +4,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Shapes
 
 Rectangle {
   id: root
@@ -14,6 +15,10 @@ Rectangle {
   property color selectorColor: "#2A1D18"
   property color menuColor: "#211711"
   property color borderColor: "#493025"
+
+  // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
+  // curvam para dentro da barra, como se o popup fosse parte dela.
+  property int edge: 16
 
   // ---------- estado ----------
 
@@ -1484,7 +1489,7 @@ echo DONE
           Layout.fillWidth: true
           implicitHeight: 38
           echoMode: TextInput.Password
-          placeholderText: "Senha da rede"
+          placeholderText: "Password"
           placeholderTextColor: root.mutedColor
           color: root.iconColor
           selectionColor: root.borderColor
@@ -1550,19 +1555,28 @@ echo DONE
 
   // ---------- popup ----------
 
-  PopupWindow {
+  PanelWindow {
     id: popup
 
-    anchor.item: root
-    anchor.rect.x: root.width / 2 - implicitWidth / 2
-    anchor.rect.y: root.height + 6
+    // janela layer-shell colada na direita da tela, logo abaixo da barra
+    screen: root.QsWindow.window.screen
+    anchors {
+      top: true
+      right: true
+    }
+    margins.top: root.QsWindow.window.height
+    exclusionMode: ExclusionMode.Ignore
 
-    implicitWidth: 390
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.namespace: "bar-popup"
+
+    implicitWidth: 390 + root.edge
     implicitHeight: panel.implicitHeight + 4
 
     visible: false
     color: "transparent"
-    grabFocus: root.inputActive
+    WlrLayershell.keyboardFocus: root.inputActive
+      ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     onVisibleChanged: {
       if (visible) {
@@ -1583,14 +1597,38 @@ echo DONE
       }
     }
 
+    Shape {
+      anchors.left: parent.left
+      anchors.top: parent.top
+      width: root.edge
+      height: root.edge
+      preferredRendererType: Shape.CurveRenderer
+
+      ShapePath {
+        strokeWidth: 0
+        fillColor: root.panelColor
+        startX: root.edge
+        startY: 0
+
+        PathLine { x: root.edge; y: root.edge }
+        PathArc {
+          x: 0
+          y: 0
+          radiusX: root.edge
+          radiusY: root.edge
+          direction: PathArc.Counterclockwise
+        }
+        PathLine { x: root.edge; y: 0 }
+      }
+    }
+
     Rectangle {
       id: panel
       anchors.fill: parent
+      anchors.leftMargin: root.edge
 
       color: root.panelColor
-      border.width: 2
-      border.color: root.iconColor
-      radius: 10
+      bottomLeftRadius: root.edge
 
       implicitHeight: content.implicitHeight + 28
 

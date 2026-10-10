@@ -46,12 +46,8 @@ PanelWindow {
     anchors.rightMargin: 8
     anchors.verticalCenter: parent.verticalCenter
 
-    AppTray {
-      parentWindow: bar
-    }
+    AppTray {}
     Volume {}
     Network {}
-    ControlPanel {}
   }
-
 }
