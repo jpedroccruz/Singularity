@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.Bar
@@ -23,11 +24,18 @@ PanelWindow {
       fillMode: Image.PreserveAspectFit
       smooth: true
 
+      Process {
+        id: launcherProc
+        command: ["qs", "ipc", "call", "launcher", "toggle"]
+      }
+
       MouseArea {
         id: mouseArea
         cursorShape: Qt.PointingHandCursor
         anchors.fill: parent
         hoverEnabled: true
+
+        onClicked: launcherProc.running = true
       }
     }
 
