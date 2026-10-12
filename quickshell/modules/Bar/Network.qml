@@ -18,7 +18,7 @@ Rectangle {
 
   // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
   // curvam para dentro da barra, como se o popup fosse parte dela.
-  property int edge: 16
+  property int edge: 20
 
   // ---------- estado ----------
 
@@ -50,7 +50,6 @@ Rectangle {
   property var networks: []
 
   property string notice: ""
-  property string phrase: "ORDENANDO QUADROS"
 
   property string connectingSsid: ""
   property string passwordSsid: ""
@@ -74,7 +73,7 @@ Rectangle {
   readonly property int speedDuration: 10   // segundos por fase
 
   // ID do servidor Ookla (veja `speedtest -L`). Vazio = o mais próximo.
-  property string speedServerId: "22472"
+  property string speedServerId: "21749"
 
   // Fonte dos números do teste de velocidade. Qualquer fonte instalada
   // funciona; as condensadas ("Oswald", "Barlow Condensed") ficam parecidas
@@ -88,13 +87,11 @@ Rectangle {
   readonly property bool isWifi: linkType === "wifi"
   readonly property bool inputActive: passwordSsid !== "" || customDnsEditing
 
-  readonly property var phrases: [
-    "ORDERING FRAMES",
-    "STACKING PACKETS",
-    "TUNING SIGNALS",
-    "ROUTING BITS",
-    "HUNTING FREQUENCIES",
-    "WAVING TO THE ROUTER"
+  readonly property var dnsOptions: [
+    { id: "dhcp", label: "DHCP" },
+    { id: "cloudflare", label: "Cloudflare" },
+    { id: "google", label: "Google" },
+    { id: "custom", label: "Custom" }
   ]
 
   readonly property var knownList: networks.filter(n => n.known)
@@ -139,6 +136,20 @@ Rectangle {
     const mb = b / 1048576
     if (mb >= 1) return mb.toFixed(1) + " MB"
     return (b / 1024).toFixed(0) + " KB"
+  }
+
+  function dnsIndex() {
+    if (root.customDnsEditing) return 3
+
+    for (let i = 0; i < root.dnsOptions.length; i++) {
+      if (root.dnsOptions[i].id === root.dnsProvider) return i
+    }
+
+    return 0
+  }
+
+  function selectorMenuOpen() {
+    return dnsSelector.popup.visible
   }
 
   function speedStatus() {
@@ -1169,7 +1180,10 @@ echo DONE
     interval: 180
 
     onTriggered: {
-      if (!mouseArea.containsMouse && !panelHover.hovered && !root.inputActive)
+      if (!mouseArea.containsMouse
+          && !panelHover.hovered
+          && !root.inputActive
+          && !root.selectorMenuOpen())
         popup.visible = false
     }
   }
@@ -1406,8 +1420,8 @@ echo DONE
 
       Rectangle {
         Layout.fillWidth: true
-        implicitHeight: 46
-        radius: 4
+        implicitHeight: 40
+        radius: 7
 
         color: modelData.inUse
           ? root.selectorColor
@@ -1415,9 +1429,9 @@ echo DONE
 
         RowLayout {
           anchors.fill: parent
-          anchors.leftMargin: 12
-          anchors.rightMargin: 14
-          spacing: 12
+          anchors.leftMargin: 10
+          anchors.rightMargin: 12
+          spacing: 10
 
           Text {
             text: root.signalSymbol(modelData.signal)
@@ -1426,28 +1440,23 @@ echo DONE
             font.pixelSize: 20
           }
 
-          ColumnLayout {
+          Text {
             Layout.fillWidth: true
-            spacing: 0
+            text: modelData.ssid
+            color: root.iconColor
+            font.family: "Rubik"
+            font.pixelSize: 13
+            elide: Text.ElideRight
+          }
 
-            Text {
-              Layout.fillWidth: true
-              text: modelData.ssid
-              color: root.iconColor
-              font.family: "Rubik"
-              font.pixelSize: 14
-              elide: Text.ElideRight
-            }
-
-            Text {
-              visible: text !== ""
-              text: root.connectingSsid === modelData.ssid
-                ? "Conectando..."
-                : (modelData.inUse ? "Conectado" : "")
-              color: root.mutedColor
-              font.family: "Rubik"
-              font.pixelSize: 12
-            }
+          Text {
+            visible: text !== ""
+            text: root.connectingSsid === modelData.ssid
+              ? "Conectando..."
+              : (modelData.inUse ? "Conectado" : "")
+            color: root.mutedColor
+            font.family: "Rubik"
+            font.pixelSize: 12
           }
 
           Text {
@@ -1487,7 +1496,7 @@ echo DONE
           id: passwordField
 
           Layout.fillWidth: true
-          implicitHeight: 38
+          implicitHeight: 42
           echoMode: TextInput.Password
           placeholderText: "Password"
           placeholderTextColor: root.mutedColor
@@ -1495,12 +1504,12 @@ echo DONE
           selectionColor: root.borderColor
           selectedTextColor: root.iconColor
           font.family: "Rubik"
-          font.pixelSize: 13
+          font.pixelSize: 14
           leftPadding: 12
 
           background: Rectangle {
             color: root.selectorColor
-            radius: 6
+            radius: 7
             border.width: 1
             border.color: passwordField.activeFocus
               ? root.iconColor : root.borderColor
@@ -1514,9 +1523,9 @@ echo DONE
         }
 
         Rectangle {
-          implicitWidth: 38
-          implicitHeight: 38
-          radius: 6
+          implicitWidth: 42
+          implicitHeight: 42
+          radius: 7
           color: root.selectorColor
           border.width: 1
           border.color: connectMouse.containsMouse
@@ -1570,7 +1579,7 @@ echo DONE
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "bar-popup"
 
-    implicitWidth: 390 + root.edge
+    implicitWidth: 340 + root.edge
     implicitHeight: panel.implicitHeight + 4
 
     visible: false
@@ -1580,10 +1589,6 @@ echo DONE
 
     onVisibleChanged: {
       if (visible) {
-        root.phrase = root.phrases[
-          Math.floor(Math.random() * root.phrases.length)
-        ]
-
         root.refreshStatus()
 
         if (root.wifiDevice !== "" && root.wifiEnabled)
@@ -1630,7 +1635,7 @@ echo DONE
       color: root.panelColor
       bottomLeftRadius: root.edge
 
-      implicitHeight: content.implicitHeight + 28
+      implicitHeight: content.implicitHeight + 24
 
       HoverHandler {
         id: panelHover
@@ -1649,17 +1654,17 @@ echo DONE
         anchors.margins: 14
         spacing: 16
 
-        // CABEÇALHO
+        // CABEÇALHO: conexão + nome da interface
 
         RowLayout {
           Layout.fillWidth: true
-          spacing: 12
+          spacing: 10
 
           Text {
             text: root.networkSymbol()
             color: root.connected ? root.iconColor : root.mutedColor
             font.family: "Material Symbols Rounded"
-            font.pixelSize: 34
+            font.pixelSize: 26
           }
 
           ColumnLayout {
@@ -1671,18 +1676,20 @@ echo DONE
               text: root.title
               color: root.iconColor
               font.family: "Rubik"
-              font.pixelSize: 17
+              font.pixelSize: 14
               font.bold: true
               elide: Text.ElideRight
             }
 
+            // nome da interface em uso (ou um aviso rápido, quando houver)
             Text {
               Layout.fillWidth: true
-              text: root.notice !== "" ? root.notice : root.phrase
+              text: root.notice !== ""
+                ? root.notice
+                : (root.device !== "" ? root.device : "--")
               color: root.mutedColor
               font.family: "Rubik"
-              font.pixelSize: 11
-              font.letterSpacing: 1.5
+              font.pixelSize: 12
               elide: Text.ElideRight
             }
           }
@@ -1690,9 +1697,9 @@ echo DONE
           // QR code
           Rectangle {
             visible: root.isWifi
-            implicitWidth: 38
-            implicitHeight: 38
-            radius: 4
+            implicitWidth: 34
+            implicitHeight: 34
+            radius: 7
             color: root.qrVisible ? root.borderColor : root.selectorColor
             border.width: 1
             border.color: qrMouse.containsMouse
@@ -1703,7 +1710,7 @@ echo DONE
               text: "qr_code_2"
               color: root.iconColor
               font.family: "Material Symbols Rounded"
-              font.pixelSize: 22
+              font.pixelSize: 20
             }
 
             MouseArea {
@@ -1718,9 +1725,9 @@ echo DONE
           // teste de velocidade (abre a janela em tela cheia)
           Rectangle {
             visible: root.connected
-            implicitWidth: 38
-            implicitHeight: 38
-            radius: 4
+            implicitWidth: 34
+            implicitHeight: 34
+            radius: 7
             color: root.selectorColor
             border.width: 1
             border.color: speedMouse.containsMouse
@@ -1731,7 +1738,7 @@ echo DONE
               text: "speed"
               color: root.iconColor
               font.family: "Material Symbols Rounded"
-              font.pixelSize: 22
+              font.pixelSize: 20
             }
 
             MouseArea {
@@ -1748,7 +1755,7 @@ echo DONE
             visible: root.wifiDevice !== ""
             implicitWidth: 46
             implicitHeight: 24
-            radius: 4
+            radius: 7
             color: root.selectorColor
             border.width: 1
             border.color: root.borderColor
@@ -1756,8 +1763,8 @@ echo DONE
             Rectangle {
               width: 20
               height: 16
-              radius: 3
-              y: 4
+              radius: 5
+              y: 3
               x: root.wifiEnabled ? parent.width - width - 4 : 4
               color: root.wifiEnabled ? root.iconColor : root.mutedColor
 
@@ -1796,6 +1803,13 @@ echo DONE
         }
 
         // ESTATÍSTICAS
+
+        Rectangle {
+          Layout.fillWidth: true
+          visible: root.connected
+          height: 1
+          color: root.borderColor
+        }
 
         GridLayout {
           Layout.fillWidth: true
@@ -1921,14 +1935,14 @@ echo DONE
           }
         }
 
+        // BANDA WI-FI
+
         Rectangle {
           Layout.fillWidth: true
           visible: root.isWifi
           height: 1
           color: root.borderColor
         }
-
-        // BANDA WI-FI
 
         RowLayout {
           Layout.fillWidth: true
@@ -1937,25 +1951,24 @@ echo DONE
 
           Text {
             Layout.fillWidth: true
-            text: "WI-FI BAND: " + root.bandLabel(root.freqMhz)
+            text: "BAND: " + root.bandLabel(root.freqMhz)
             color: root.iconColor
             font.family: "Rubik"
-            font.pixelSize: 12
-            font.letterSpacing: 0.5
+            font.pixelSize: 13
+            font.bold: true
           }
 
           Text {
             text: "AUTOMATIC"
             color: root.iconColor
             font.family: "Rubik"
-            font.pixelSize: 12
-            font.letterSpacing: 0.5
+            font.pixelSize: 13
           }
 
           Rectangle {
             implicitWidth: 38
             implicitHeight: 20
-            radius: 4
+            radius: 7
             color: root.selectorColor
             border.width: 1
             border.color: root.borderColor
@@ -1963,8 +1976,8 @@ echo DONE
             Rectangle {
               width: 16
               height: 12
-              radius: 3
-              y: 4
+              radius: 5
+              y: 3
               x: root.bandAuto ? parent.width - width - 4 : 4
               color: root.bandAuto ? root.iconColor : root.mutedColor
 
@@ -1981,14 +1994,14 @@ echo DONE
           }
         }
 
+        // PROVEDOR DE DNS
+
         Rectangle {
           Layout.fillWidth: true
-          visible: root.connected
+          visible: root.connected && root.connName !== ""
           height: 1
           color: root.borderColor
         }
-
-        // PROVEDOR DE DNS
 
         ColumnLayout {
           Layout.fillWidth: true
@@ -1996,57 +2009,104 @@ echo DONE
           spacing: 10
 
           Text {
-            text: "DNS PROVIDER"
+            text: "DNS"
             color: root.iconColor
             font.family: "Rubik"
-            font.pixelSize: 12
-            font.letterSpacing: 0.5
+            font.pixelSize: 13
+            font.bold: true
           }
 
-          RowLayout {
+          ComboBox {
+            id: dnsSelector
+
             Layout.fillWidth: true
-            spacing: 8
-            uniformCellSizes: true
+            implicitHeight: 42
+            model: root.dnsOptions
+            textRole: "label"
+            currentIndex: root.dnsIndex()
 
-            Repeater {
-              model: [
-                { id: "dhcp", label: "DHCP" },
-                { id: "cloudflare", label: "Cloudflare" },
-                { id: "google", label: "Google" },
-                { id: "custom", label: "Custom" }
-              ]
+            onActivated: index => {
+              if (index >= 0)
+                root.pickDns(root.dnsOptions[index].id)
+            }
 
-              delegate: Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 38
-                radius: 4
+            background: Rectangle {
+              color: root.selectorColor
+              radius: 7
+              border.width: 1
+              border.color: root.borderColor
+            }
 
-                property bool selected: root.dnsProvider === modelData.id
+            contentItem: Text {
+              leftPadding: 12
+              rightPadding: 30
+              text: dnsSelector.displayText
+              color: root.iconColor
+              font.family: "Rubik"
+              font.pixelSize: 14
+              verticalAlignment: Text.AlignVCenter
+              elide: Text.ElideRight
+            }
 
-                color: selected
-                  ? root.borderColor
-                  : (dnsMouse.containsMouse ? root.menuColor : "transparent")
+            indicator: Text {
+              x: dnsSelector.width - width - 10
+              anchors.verticalCenter: parent.verticalCenter
+              text: "arrow_drop_down"
+              color: root.iconColor
+              font.family: "Material Symbols Rounded"
+              font.pixelSize: 24
+            }
+
+            popup: Popup {
+              y: dnsSelector.height + 4
+              width: dnsSelector.width
+              padding: 4
+
+              onAboutToShow: closeTimer.stop()
+
+              onClosed: {
+                if (!mouseArea.containsMouse && !panelHover.hovered)
+                  closeTimer.restart()
+              }
+
+              background: Rectangle {
+                color: root.panelColor
                 border.width: 1
-                border.color: selected ? root.iconColor : root.borderColor
+                border.color: root.borderColor
+                radius: 7
+              }
 
-                Text {
-                  anchors.centerIn: parent
-                  width: parent.width - 8
-                  horizontalAlignment: Text.AlignHCenter
-                  text: modelData.label
-                  color: root.iconColor
-                  font.family: "Rubik"
-                  font.pixelSize: 13
-                  elide: Text.ElideRight
-                }
+              contentItem: ListView {
+                clip: true
+                implicitHeight: Math.min(contentHeight, 190)
+                model: dnsSelector.delegateModel
+                currentIndex: dnsSelector.highlightedIndex
+                boundsBehavior: Flickable.StopAtBounds
 
-                MouseArea {
-                  id: dnsMouse
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.pickDns(modelData.id)
-                }
+                ScrollIndicator.vertical: ScrollIndicator {}
+              }
+            }
+
+            delegate: ItemDelegate {
+              width: dnsSelector.width - 8
+              implicitHeight: 38
+              highlighted: dnsSelector.highlightedIndex === index
+
+              background: Rectangle {
+                color: parent.highlighted
+                  ? root.borderColor
+                  : root.menuColor
+                radius: 5
+              }
+
+              contentItem: Text {
+                text: modelData.label
+                color: root.iconColor
+                font.family: "Rubik"
+                font.pixelSize: 13
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                leftPadding: 8
               }
             }
           }
@@ -2055,7 +2115,7 @@ echo DONE
             id: customDnsField
 
             Layout.fillWidth: true
-            implicitHeight: 38
+            implicitHeight: 42
             visible: root.customDnsEditing
             text: root.customDns
             placeholderText: "Ex.: 9.9.9.9 149.112.112.112"
@@ -2064,12 +2124,12 @@ echo DONE
             selectionColor: root.borderColor
             selectedTextColor: root.iconColor
             font.family: "Rubik"
-            font.pixelSize: 13
+            font.pixelSize: 14
             leftPadding: 12
 
             background: Rectangle {
               color: root.selectorColor
-              radius: 6
+              radius: 7
               border.width: 1
               border.color: customDnsField.activeFocus
                 ? root.iconColor : root.borderColor
@@ -2091,6 +2151,13 @@ echo DONE
         }
 
         // REDES
+
+        Rectangle {
+          Layout.fillWidth: true
+          visible: root.wifiDevice !== ""
+          height: 1
+          color: root.borderColor
+        }
 
         Text {
           visible: root.wifiDevice !== "" && !root.wifiEnabled
@@ -2124,10 +2191,10 @@ echo DONE
             Text {
               visible: root.knownList.length > 0
               text: "KNOWN NETWORKS"
-              color: root.mutedColor
+              color: root.iconColor
               font.family: "Rubik"
-              font.pixelSize: 11
-              font.letterSpacing: 0.5
+              font.pixelSize: 13
+              font.bold: true
             }
 
             Repeater {
@@ -2139,10 +2206,10 @@ echo DONE
               visible: root.otherList.length > 0
               Layout.topMargin: 8
               text: "OTHER NETWORKS"
-              color: root.mutedColor
+              color: root.iconColor
               font.family: "Rubik"
-              font.pixelSize: 11
-              font.letterSpacing: 0.5
+              font.pixelSize: 13
+              font.bold: true
             }
 
             Repeater {
