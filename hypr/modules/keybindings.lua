@@ -15,6 +15,7 @@ hl.bind(mainMod .. " + SPACE", hl.dsp.exec_cmd(launcher))
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(browser))
 hl.bind("CTRL + SHIFT + ESCAPE", hl.dsp.exec_cmd(terminal .. " " .. system_info))
 hl.bind("SUPER + TAB", hl.dsp.exec_cmd("qs ipc -c overview call overview toggle"))
+hl.bind("SUPER + CTRL + SHIFT + Q", hl.dsp.exec_cmd("pkill qs && qs & sleep 0.5 && qs -c overview"))
 
 -- screenshot
 hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m output -n --raw | satty --filename -"))
