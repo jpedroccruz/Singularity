@@ -8,6 +8,7 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 export SINGULARITY_ROOT="$ROOT_DIR"
 
 source "$ROOT_DIR/bin/lib/theme.sh"
+source "$ROOT_DIR/bin/lib/wallpaper.sh"
 
 usage() {
     cat <<'EOF'
@@ -75,6 +76,34 @@ main() {
             echo "Singularity 0.1.0"
             ;;
 
+    wallpaper)
+        shift
+
+        case "${1:-}" in
+            set)
+                shift
+                wallpaper_set "$@"
+                ;;
+            list)
+                shift
+                wallpaper_list "$@"
+                ;;
+            current)
+                wallpaper_current
+                ;;
+            next)
+                wallpaper_next
+                ;;
+            previous)
+                wallpaper_previous
+                ;;
+            *)
+                echo "Usage: singularity wallpaper {set|list|current|next|previous} [theme]" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+        
         *)
             echo "Error: unknown command: $1" >&2
             usage >&2

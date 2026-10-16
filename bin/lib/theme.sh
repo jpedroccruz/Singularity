@@ -76,7 +76,14 @@ theme_set() {
         return 1
     fi
 
-    theme_save_current "$name"
+    if ! wallpaper_set "$name"; then
+        echo "Warning: failed to apply default wallpaper for theme: $name" >&2
+    fi
+
+    if ! theme_save_current "$name"; then
+        echo "Error: failed to save current theme." >&2
+        return 1
+    fi
 
     echo "Theme set to: $name"
 }
