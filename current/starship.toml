@@ -1,0 +1,48 @@
+format = """
+$directory\
+$nodejs\
+$rust\
+$golang\
+$php\
+$fill\
+$time\
+\n$character"""
+
+[fill]
+symbol = " "
+
+[directory]
+style = "fg:#f37523"
+format = "[$path ]($style)"
+truncation_length = 100
+truncate_to_repo = false
+
+[nodejs]
+symbol = ""
+style = "fg:#f37523"
+format = '[ $symbol $version ]($style)'
+
+[rust]
+symbol = ""
+style = "fg:#f37523"
+format = '[ $symbol $version ]($style)'
+
+[golang]
+symbol = ""
+style = "fg:#f37523"
+format = '[ $symbol $version ]($style)'
+
+[php]
+symbol = ""
+style = "fg:#f37523"
+format = '[ $symbol $version ]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "fg:#f37523"
+format = '[ $time]($style)'
+
+[character]
+success_symbol = "[➜](fg:#f37523)"
+error_symbol = "[➜](fg:red)"
