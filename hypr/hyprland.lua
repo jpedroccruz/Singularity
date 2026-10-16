@@ -1,4 +1,5 @@
 -- Sourcing files
+require("modules/colors")
 require("modules/monitors")
 require("modules/programs")
 require("modules/autostart")

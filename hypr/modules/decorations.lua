@@ -11,7 +11,7 @@ hl.config({
         border_size = 2,
 
         col = {
-            active_border   = "rgba(FFA376FF)",
+            active_border   = colors.accent,
             inactive_border = "rgba(00000000)",
         },
 
