@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Singularity-Solarius
+Comment=An Flat Gtk+ theme based on Elegant Design
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=Singularity-Solarius
+MetacityTheme=Singularity-Solarius
+IconTheme=Colloid
+CursorTheme=Singularity-Solarius-cursors
+ButtonLayout=close,minimize,maximize:menu
