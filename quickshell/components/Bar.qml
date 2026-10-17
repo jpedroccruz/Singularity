@@ -3,13 +3,14 @@ import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.Bar
+import qs.theme as ThemeModule
 
 PanelWindow {
   id: bar
 
   anchors { top: true; left: true; right: true }
   implicitHeight: 30
-  color: "#17100B"
+  color: ThemeModule.Theme.darkBackground
 
   RowLayout {
     anchors.left: parent.left

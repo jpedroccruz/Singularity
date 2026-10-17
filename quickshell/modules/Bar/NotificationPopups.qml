@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import Quickshell.Services.Notifications
 import QtQuick
 import QtQuick.Layouts
+import qs.theme as ThemeModule
 
 // Banners de notificação no topo, centralizados (estilo Ubuntu/GNOME).
 // Não é um servidor: quem recebe as notificações é o NotificationServer do
@@ -13,12 +14,12 @@ Scope {
 
   // ---------- tema (mesmas cores do módulo de rede) ----------
 
-  property color iconColor: "#FFA376"
-  property color mutedColor: "#765B50"
-  property color panelColor: "#17100B"
-  property color selectorColor: "#2A1D18"
-  property color menuColor: "#211711"
-  property color borderColor: "#493025"
+  property color iconColor: ThemeModule.Theme.accent
+  property color mutedColor: ThemeModule.Theme.muted
+  property color panelColor: ThemeModule.Theme.background
+  property color selectorColor: ThemeModule.Theme.selector
+  property color menuColor: ThemeModule.Theme.menu
+  property color borderColor: ThemeModule.Theme.border
 
   // ---------- configuração ----------
 

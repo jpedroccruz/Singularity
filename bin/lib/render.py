@@ -6,12 +6,12 @@ import sys
 import tomllib
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parents[2]
-
 THEMES_DIR = ROOT_DIR / "themes"
 TEMPLATES_DIR = ROOT_DIR / "templates"
 CURRENT_DIR = ROOT_DIR / "current"
+QUICKSHELL_DIR = ROOT_DIR / "quickshell"
+
 
 def render_template(
     template_file: Path,
@@ -30,6 +30,7 @@ def render_template(
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     output_file.write_text(template, encoding="utf-8")
+
 
 def load_theme_colors(theme_name: str) -> dict:
     colors_file = THEMES_DIR / theme_name / "colors.toml"
@@ -56,6 +57,7 @@ def load_theme_colors(theme_name: str) -> dict:
 
     return colors
 
+
 def render_hypr_colors(colors: dict) -> None:
     template_file = TEMPLATES_DIR / "colors.lua.tpl"
     output_file = CURRENT_DIR / "colors.lua"
@@ -73,6 +75,7 @@ def render_hypr_colors(colors: dict) -> None:
 
     print(f"Hyprland: {output_file}")
 
+
 def render_starship(colors: dict) -> None:
     template_file = TEMPLATES_DIR / "starship.toml.tpl"
     output_file = CURRENT_DIR / "starship.toml"
@@ -89,6 +92,80 @@ def render_starship(colors: dict) -> None:
     )
 
     print(f"Starship: {output_file}")
+
+
+
+def render_quickshell_logo(colors: dict) -> None:
+    template_file = (
+        TEMPLATES_DIR / "singularity.svg.tpl"
+    )
+    output_file = (
+        CURRENT_DIR / "singularity.svg"
+    )
+
+    if not template_file.is_file():
+        raise FileNotFoundError(
+            f"Template não encontrado: {template_file}"
+        )
+
+    accent = colors.get("accent")
+
+    if not isinstance(accent, str) or not re.fullmatch(
+        r"#[0-9a-fA-F]{6}", accent
+    ):
+        raise ValueError("A cor accent é inválida.")
+
+    render_template(
+        template_file,
+        output_file,
+        {"accent": accent},
+    )
+
+    print(f"Quickshell logo: {output_file}")
+
+def render_quickshell(colors: dict) -> None:
+    template_file = TEMPLATES_DIR / "Theme.qml.tpl"
+    output_file = CURRENT_DIR / "Theme.qml"
+
+    required_colors = [
+        "accent",
+        "selection",
+        "muted",
+        "background",
+        "dark_background",
+        "darker_background",
+        "lighter_background",
+        "foreground",
+        "dark_foreground",
+        "light_foreground",
+        "bright_foreground",
+    ]
+
+    missing_colors = [
+        key
+        for key in required_colors
+        if not isinstance(colors.get(key), str)
+    ]
+
+    if missing_colors:
+        raise ValueError(
+            "Cores ausentes ou inválidas no colors.toml: "
+            + ", ".join(missing_colors)
+        )
+
+    if not template_file.is_file():
+        raise FileNotFoundError(
+            f"Template não encontrado: {template_file}"
+        )
+
+    render_template(
+        template_file,
+        output_file,
+        {key: colors[key] for key in required_colors},
+    )
+
+    print(f"Quickshell: {output_file}")
+
 
 def main() -> int:
     if len(sys.argv) != 2:
@@ -109,6 +186,8 @@ def main() -> int:
 
         render_hypr_colors(colors)
         render_starship(colors)
+        render_quickshell_logo(colors)
+        render_quickshell(colors)
 
     except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
         print(f"Erro ao renderizar tema: {error}", file=sys.stderr)

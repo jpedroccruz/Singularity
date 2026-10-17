@@ -5,18 +5,19 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
+import qs.theme as ThemeModule
 
 Scope {
   id: root
 
   // ---------- tema (mesmas cores/fontes do componente de rede) ----------
 
-  property color iconColor: "#FFA376"
-  property color mutedColor: "#765B50"
-  property color panelColor: "#17100B"
-  property color selectorColor: "#2A1D18"
-  property color menuColor: "#211711"
-  property color borderColor: "#493025"
+  property color iconColor: ThemeModule.Theme.accent
+  property color mutedColor: ThemeModule.Theme.muted
+  property color panelColor: ThemeModule.Theme.darkBackground
+  property color selectorColor: ThemeModule.Theme.selection
+  property color menuColor: ThemeModule.Theme.darkerBackground
+  property color borderColor: ThemeModule.Theme.muted
 
   property string uiFont: "Rubik"
   property string iconFont: "Material Symbols Rounded"

@@ -5,7 +5,14 @@
 local mainMod = "SUPER" -- Sets "Windows" key as main modifier
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
-local closeWindowBind = hl.bind(mainMod .. " + C", hl.dsp.window.close())
+local closeWindowBind = hl.bind(mainMod .. " + C", function()
+  local w = hl.get_active_window()
+  if w ~= nil and w.class == "org.gnome.Nautilus" then
+    hl.exec_cmd("nautilus -q")        
+  else
+    hl.dispatch(hl.dsp.window.close())
+  end
+end)
 -- closeWindowBind:set_enabled(false)
 
 -- programs

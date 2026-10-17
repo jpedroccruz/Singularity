@@ -5,16 +5,17 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
+import qs.theme as ThemeModule
 
 Rectangle {
   id: root
 
-  property color iconColor: "#FFA376"
-  property color mutedColor: "#765B50"
-  property color panelColor: "#17100B"
-  property color selectorColor: "#2A1D18"
-  property color menuColor: "#211711"
-  property color borderColor: "#493025"
+  property color iconColor: ThemeModule.Theme.accent
+  property color mutedColor: ThemeModule.Theme.muted
+  property color panelColor: ThemeModule.Theme.background
+  property color selectorColor: ThemeModule.Theme.selector
+  property color menuColor: ThemeModule.Theme.menu
+  property color borderColor: ThemeModule.Theme.border
 
   // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
   // curvam para dentro da barra, como se o popup fosse parte dela.
@@ -785,10 +786,10 @@ echo DONE
     property bool active: false
     property string iconName: "arrow_circle_down"
     property string numberFont: "Rubik"
-    property color accent: "#FFA376"
-    property color accentDark: "#765B50"
-    property color trackColor: "#2A1D18"
-    property color dimColor: "#765B50"
+    property color accent: ThemeModule.Theme.accent
+    property color accentDark: ThemeModule.Theme.muted
+    property color trackColor: ThemeModule.Theme.selector
+    property color dimColor: ThemeModule.Theme.muted
 
     readonly property var marks: [0, 5, 10, 50, 100, 250, 500, 750, 1000]
     readonly property real startAngle: Math.PI * 0.75

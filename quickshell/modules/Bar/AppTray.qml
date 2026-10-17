@@ -5,13 +5,14 @@ import Quickshell.Services.SystemTray
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Shapes
+import qs.theme as ThemeModule
 
 Rectangle {
   id: root
 
-  property color iconColor: "#FFA376"
-  property color mutedColor: "#765B50"
-  property color panelColor: "#17100B"
+  property color iconColor: ThemeModule.Theme.accent
+  property color mutedColor: ThemeModule.Theme.muted
+  property color panelColor: ThemeModule.Theme.background
 
   // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
   // curvam para dentro da barra, como se o popup fosse parte dela.
@@ -254,7 +255,7 @@ Rectangle {
             Layout.preferredHeight: modelData.isSeparator ? 1 : 30
             color: modelData.isSeparator
               ? root.iconColor
-              : menuMouseArea.containsMouse ? "#2A1D18" : "transparent"
+              : menuMouseArea.containsMouse ? ThemeModule.Theme.selector : "transparent"
 
             MouseArea {
               id: menuMouseArea

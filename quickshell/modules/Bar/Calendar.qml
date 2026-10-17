@@ -1,6 +1,7 @@
 import Quickshell
 import QtQuick
 import QtQuick.Layouts
+import qs.theme as ThemeModule
 
 PopupWindow {
   id: calendar
@@ -8,10 +9,10 @@ PopupWindow {
   property var target
   property date selectedDate: new Date()
   property date displayedDate: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
-  property color accent: "#FFA376"
-  property color background: "#17100B"
-  property color muted: "#765B50"
-  property color gridLine: "#3A2922"
+  property color accent: ThemeModule.Theme.accent
+  property color background: ThemeModule.Theme.background
+  property color muted: ThemeModule.Theme.muted
+  property color gridLine: ThemeModule.Theme.gridLine
   property int calendarSideMargin: 34
 
   anchor.item: target

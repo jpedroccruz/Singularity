@@ -2,13 +2,14 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
+import qs.theme as ThemeModule
 
 RowLayout {
   id: root
 
   property int workspaceCount: 10
-  property color accent: "#FFA376"
-  property color mutedAccent: "#765B50"
+  property color accent: ThemeModule.Theme.accent
+  property color mutedAccent: ThemeModule.Theme.muted
 
   function workspaceFor(id) {
     for (const workspace of Hyprland.workspaces.values) {
@@ -80,7 +81,7 @@ RowLayout {
         anchors.centerIn: parent
         text: parent.index + 1
         color: parent.active || parent.hovered
-          ? "#17100B"
+          ? ThemeModule.Theme.background
           : parent.occupied ? root.accent : root.mutedAccent
         font.family: "Rubik"
         font.pixelSize: 12

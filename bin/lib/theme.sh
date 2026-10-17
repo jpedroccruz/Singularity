@@ -76,9 +76,20 @@ theme_set() {
         return 1
     fi
 
+    # Temporarily: restart nautilus to fully update gtk theme.
+    if pgrep -x nautilus >/dev/null; then
+        nautilus -q 2>/dev/null || true
+        nautilus --new-window >/dev/null 2>&1 &
+    fi
+
     if ! wallpaper_set "$name"; then
         echo "Warning: failed to apply default wallpaper for theme: $name" >&2
     fi
+
+    pkill -x qs 2>/dev/null || true
+    qs &
+    sleep 0.5
+    qs -c overview &
 
     if ! theme_save_current "$name"; then
         echo "Error: failed to save current theme." >&2

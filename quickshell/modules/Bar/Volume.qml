@@ -6,16 +6,17 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
+import qs.theme as ThemeModule
 
 Rectangle {
   id: root
 
-  property color iconColor: "#FFA376"
-  property color mutedColor: "#765B50"
-  property color panelColor: "#17100B"
-  property color selectorColor: "#2A1D18"
-  property color menuColor: "#211711"
-  property color borderColor: "#493025"
+  property color iconColor: ThemeModule.Theme.accent
+  property color mutedColor: ThemeModule.Theme.muted
+  property color panelColor: ThemeModule.Theme.background
+  property color selectorColor: ThemeModule.Theme.selector
+  property color menuColor: ThemeModule.Theme.menu
+  property color borderColor: ThemeModule.Theme.border
 
   property int edge: 20
 
@@ -962,7 +963,7 @@ Rectangle {
                 color: root.source && root.source.audio.muted
                   ? root.mutedColor
                   : root.microphonePeak > 0.85
-                    ? "#FF6659"
+                    ? ThemeModule.Theme.error
                     : root.iconColor
 
                 Behavior on width {
