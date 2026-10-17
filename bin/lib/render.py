@@ -11,6 +11,8 @@ THEMES_DIR = ROOT_DIR / "themes"
 TEMPLATES_DIR = ROOT_DIR / "templates"
 CURRENT_DIR = ROOT_DIR / "current"
 QUICKSHELL_DIR = ROOT_DIR / "quickshell"
+HYPRLOCK_TEMPLATE = TEMPLATES_DIR / "hyprlock.conf.tpl"
+HYPRLOCK_OUTPUT = CURRENT_DIR / "hyprlock.conf"
 
 
 def render_template(
@@ -167,6 +169,19 @@ def render_quickshell(colors: dict) -> None:
     print(f"Quickshell: {output_file}")
 
 
+def render_hyprlock(colors: dict) -> None:
+    accent = colors["accent"].lstrip("#")
+
+    render_template(
+        HYPRLOCK_TEMPLATE,
+        HYPRLOCK_OUTPUT,
+        {
+            "accent": accent,
+        },
+    )
+
+    print(f"Hyprlock: {HYPRLOCK_OUTPUT}")
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(
@@ -188,6 +203,7 @@ def main() -> int:
         render_starship(colors)
         render_quickshell_logo(colors)
         render_quickshell(colors)
+        render_hyprlock(colors)
 
     except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
         print(f"Erro ao renderizar tema: {error}", file=sys.stderr)

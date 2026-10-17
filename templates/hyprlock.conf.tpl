@@ -1,0 +1,171 @@
+
+# GENERAL
+general {
+    no_fade_in = true
+    no_fade_out = true
+    hide_cursor = false
+    immediate_render = false
+    screencopy_mode = 1
+    grace = 0
+    disable_loading_bar = false
+}
+
+animations {
+    enabled = true
+    bezier = smooth, 0.22, 1, 0.36, 1
+    animation = inputFieldColors, 1, 2, smooth
+}
+
+# BACKGROUND
+background {
+    monitor =
+    path = screenshot
+    blur_passes = 2
+    contrast = 0.832
+    brightness = 0.5
+    vibrancy = 0.2
+    vibrancy_darkness = 0.2
+}
+
+# TIME
+label {
+    monitor = 
+    text = cmd[update:1000] date "+%I:%M"
+    color = rgb({{ accent }})
+    font_size = 100
+    font_family = Rubik
+    position = 0, 300
+    halign = center
+    valign = center
+}
+
+# DATE
+label {
+    monitor =
+    text = cmd[update:1000] date +"%a, %b %d"
+    color = rgb({{ accent }})
+    font_size = 18
+    font_family = Rubik Bold
+    position = 0, 225
+    halign = center
+    valign = center
+}
+
+# PICTURE
+image {
+    monitor =
+    path = ~/.local/share/profile.jpg
+    size = 100
+    border_size = 1
+    border_color = rgb({{ accent }})
+    position = 0, 0
+    halign = center
+    valign = center
+
+    shadow_passes = 2
+    shadow_size = 3    
+    shadow_color = rgb({{ accent }})
+    shadow_boost = 1.2
+}
+
+# USERNAME
+label {
+    monitor = 
+    text = cmd[update:1000] echo "$USER@$HOSTNAME"
+    color = rgb({{ accent }})
+    font_size = 14
+    font_family = Rubik Bold
+    position = 0, -75
+    halign = center
+    valign = center
+}
+
+# CURRENT SONG
+label {
+    monitor =
+    text = cmd[update:180] ~/Singularity/bin/hyprlock-song
+
+    color = rgb({{ accent }})
+    font_size = 16
+    font_family = Rubik
+
+    position = 0, -260
+    halign = center
+    valign = center
+}
+
+# Previous track
+label {
+    text = skip_previous
+    font_family = Material Symbols Rounded
+    font_size = 24
+    color = rgb({{ accent }})
+
+    position = -50, -300
+    halign = center
+    valign = center
+
+    onclick = ~/Singularity/bin/hyprlock-media previous
+}
+
+# Play / Pause
+label {
+    text = cmd[update:1000] ~/Singularity/bin/hyprlock-play-pause
+
+    font_family = Material Symbols Rounded
+    font_size = 24
+    color = rgb({{ accent }})
+
+    position = 0, -300
+    halign = center
+    valign = center
+
+    onclick = ~/Singularity/bin/hyprlock-media play-pause
+}
+
+# Next track
+label {
+    text = skip_next
+    font_family = Material Symbols Rounded
+    font_size = 24
+    color = rgb({{ accent }})
+
+    position = 50, -300
+    halign = center
+    valign = center
+
+    onclick = ~/Singularity/bin/hyprlock-media next
+}
+
+# INPUT FIELD
+input-field {
+    monitor =
+    size = 500, 80
+    outline_thickness = -1
+
+    dots_size = 0.2
+    dots_spacing = 0.35
+    dots_center = true
+
+    outer_color = rgba(0, 0, 0, 0)
+    inner_color = rgba(0, 0, 0, 0)
+    font_color = rgb({{ accent }})
+
+    fade_on_empty = false
+
+    rounding = -1
+
+    check_color = rgb({{ accent }})
+    fail_color = rgb(200, 0, 0)
+
+    font_family = Rubik
+    fail_text = $FAIL ($ATTEMPTS)
+    check_text = Authenticating...
+    placeholder_text = <span>󰌾  Press any key to unlock</span>
+
+    hide_input = false
+
+    position = 0, -450
+    halign = center
+    valign = center
+}

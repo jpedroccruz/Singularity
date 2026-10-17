@@ -1,0 +1,23 @@
+
+#!/usr/bin/env bash
+
+MAX_LENGTH=50
+
+if playerctl --player=spotify status >/dev/null 2>&1; then
+    PLAYER_ARGS=(--player=spotify)
+else
+    PLAYER_ARGS=()
+fi
+
+text="$(playerctl "${PLAYER_ARGS[@]}" metadata \
+    --format '♫  {{ artist }} - {{ title }}' 2>/dev/null)"
+
+if [[ -z "$text" ]]; then
+    text="♫  Nothing playing"
+fi
+
+if (( ${#text} > MAX_LENGTH )); then
+    text="${text:0:MAX_LENGTH-3}..."
+fi
+
+printf '%s\n' "$text"

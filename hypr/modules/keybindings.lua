@@ -3,6 +3,7 @@
 ---------------------
 
 local mainMod = "SUPER" -- Sets "Windows" key as main modifier
+local media = os.getenv("HOME") .. "/Singularity/bin/hyprlock-media"
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
 local closeWindowBind = hl.bind(mainMod .. " + C", function()
@@ -20,6 +21,7 @@ hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
 hl.bind(mainMod .. " + SPACE", hl.dsp.exec_cmd(launcher))
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(browser))
+hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
 hl.bind("CTRL + SHIFT + ESCAPE", hl.dsp.exec_cmd(terminal .. " " .. system_info))
 hl.bind("SUPER + TAB", hl.dsp.exec_cmd("qs ipc -c overview call overview toggle"))
 hl.bind("SUPER + CTRL + SHIFT + Q", hl.dsp.exec_cmd("pkill qs && qs & sleep 0.5 && qs -c overview"))
@@ -77,7 +79,7 @@ hl.bind("XF86MonBrightnessUp",  hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%+")
 hl.bind("XF86MonBrightnessDown",hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%-"),                  { locked = true, repeating = true })
 
 -- Requires playerctl
-hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true })
-hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
-hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
-hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true })
+hl.bind("XF86AudioNext", hl.dsp.exec_cmd(media .. " next"), { locked = true })
+hl.bind("XF86AudioPause", hl.dsp.exec_cmd(media .. " play-pause"), { locked = true })
+hl.bind("XF86AudioPlay", hl.dsp.exec_cmd(media .. " play-pause"), { locked = true })
+hl.bind("XF86AudioPrev", hl.dsp.exec_cmd(media .. " previous"), { locked = true })

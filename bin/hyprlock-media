@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+if playerctl --player=spotify status >/dev/null 2>&1; then
+    PLAYER_ARGS=(--player=spotify)
+else
+    PLAYER_ARGS=()
+fi
+
+exec playerctl "${PLAYER_ARGS[@]}" "$@"
