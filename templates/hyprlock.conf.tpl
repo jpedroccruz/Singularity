@@ -42,7 +42,7 @@ label {
 # DATE
 label {
     monitor =
-    text = cmd[update:1000] date +"%a, %b %d"
+    text = cmd[update:1000] date +"%a, %B %d"
     color = rgb({{ accent }})
     font_size = 18
     font_family = Rubik Bold
