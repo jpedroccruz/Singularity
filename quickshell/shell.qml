@@ -5,4 +5,5 @@ import qs.components as Components
 ShellRoot {
   Components.Bar {}
   Components.Launcher {}
+  Components.PowerMenu {}
 }
