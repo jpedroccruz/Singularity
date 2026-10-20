@@ -60,3 +60,10 @@ hl.layer_rule({
     name = "powermenu-blur",
     blur = true,
 })
+
+hl.window_rule({
+  name = "updates-popup",
+  match = { class = "^(updates)$" },
+  float = true,
+  size = { 1000, 600 }
+})
