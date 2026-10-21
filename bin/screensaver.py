@@ -1,0 +1,1 @@
+/home/agnis/Singularity/current/screensaver.py

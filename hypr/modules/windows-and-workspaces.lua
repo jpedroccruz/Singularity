@@ -67,3 +67,13 @@ hl.window_rule({
   float = true,
   size = { 1000, 600 }
 })
+
+hl.window_rule({
+  name = "screensaver",
+  match = { class = "^screensaver$" },
+  fullscreen = true,
+  border_size = 0,
+  rounding = 0,
+  opacity = "1.0 override",
+  opaque = true,
+})

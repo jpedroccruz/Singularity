@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 import re
@@ -13,6 +12,8 @@ CURRENT_DIR = ROOT_DIR / "current"
 QUICKSHELL_DIR = ROOT_DIR / "quickshell"
 HYPRLOCK_TEMPLATE = TEMPLATES_DIR / "hyprlock.conf.tpl"
 HYPRLOCK_OUTPUT = CURRENT_DIR / "hyprlock.conf"
+SCREENSAVER_TEMPLATE = TEMPLATES_DIR / "screensaver.py.tpl"
+SCREENSAVER_OUTPUT = CURRENT_DIR / "screensaver.py"
 
 
 def render_template(
@@ -96,14 +97,9 @@ def render_starship(colors: dict) -> None:
     print(f"Starship: {output_file}")
 
 
-
 def render_quickshell_logo(colors: dict) -> None:
-    template_file = (
-        TEMPLATES_DIR / "singularity.svg.tpl"
-    )
-    output_file = (
-        CURRENT_DIR / "singularity.svg"
-    )
+    template_file = TEMPLATES_DIR / "singularity.svg.tpl"
+    output_file = CURRENT_DIR / "singularity.svg"
 
     if not template_file.is_file():
         raise FileNotFoundError(
@@ -124,6 +120,7 @@ def render_quickshell_logo(colors: dict) -> None:
     )
 
     print(f"Quickshell logo: {output_file}")
+
 
 def render_quickshell(colors: dict) -> None:
     template_file = TEMPLATES_DIR / "Theme.qml.tpl"
@@ -182,6 +179,43 @@ def render_hyprlock(colors: dict) -> None:
 
     print(f"Hyprlock: {HYPRLOCK_OUTPUT}")
 
+
+def render_screensaver(colors: dict) -> None:
+    required_colors = [
+        "muted",
+        "accent",
+        "foreground",
+        "bright_foreground",
+        "dark_foreground",
+    ]
+
+    missing_colors = [
+        key
+        for key in required_colors
+        if not isinstance(colors.get(key), str)
+        or not re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", colors[key])
+    ]
+
+    if missing_colors:
+        raise ValueError(
+            "Cores ausentes ou inválidas para o screensaver no colors.toml: "
+            + ", ".join(missing_colors)
+        )
+
+    if not SCREENSAVER_TEMPLATE.is_file():
+        raise FileNotFoundError(
+            f"Template não encontrado: {SCREENSAVER_TEMPLATE}"
+        )
+
+    render_template(
+        SCREENSAVER_TEMPLATE,
+        SCREENSAVER_OUTPUT,
+        {key: colors[key] for key in required_colors},
+    )
+
+    print(f"Screensaver: {SCREENSAVER_OUTPUT}")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(
@@ -204,6 +238,7 @@ def main() -> int:
         render_quickshell_logo(colors)
         render_quickshell(colors)
         render_hyprlock(colors)
+        render_screensaver(colors)
 
     except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
         print(f"Erro ao renderizar tema: {error}", file=sys.stderr)
