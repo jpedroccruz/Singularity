@@ -80,35 +80,21 @@ wallpaper_select() {
 
 # Set the default wallpaper for a theme.
 wallpaper_set() {
-    if (($# > 1)); then
-        echo "Usage: singularity wallpaper set [theme]" >&2
+    if (($# != 1)); then
+        echo "Usage: singularity wallpaper set <wallpaper-path>" >&2
         return 2
     fi
 
-    local name="${1:-}"
-    local wallpaper
+    local wallpaper="$1"
 
-    if [[ -z "$name" ]]; then
-        name="$(theme_read_current)"
-    fi
-
-    if [[ -z "$name" ]]; then
-        echo "Error: no theme selected." >&2
-        return 1
-    fi
-
-    if ! theme_exists "$name"; then
-        echo "Error: theme not found: $name" >&2
-        return 1
-    fi
-
-    if ! wallpaper="$(wallpaper_find_default "$name")"; then
-        echo "Error: no wallpaper found for theme: $name" >&2
+    if [[ ! -f "$wallpaper" ]]; then
+        echo "Error: wallpaper not found: $wallpaper" >&2
         return 1
     fi
 
     wallpaper_select "$wallpaper"
 }
+
 
 # List wallpapers for a theme.
 wallpaper_list() {

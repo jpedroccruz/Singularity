@@ -29,6 +29,10 @@ hl.bind("CTRL + SHIFT + ESCAPE", hl.dsp.exec_cmd(terminal .. " " .. system_info)
 hl.bind("SUPER + TAB", hl.dsp.exec_cmd("qs ipc -c overview call overview toggle"))
 hl.bind("SUPER + CTRL + SHIFT + Q", hl.dsp.exec_cmd("pkill qs && qs & sleep 0.5 && qs -c overview"))
 
+-- singularity
+hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("qs ipc call radial toggleThemes"))
+hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("qs ipc call radial toggleWallpapers"))
+
 -- screenshot
 hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m output -n --raw | satty --filename -"))
 hl.bind("SHIFT + Print", hl.dsp.exec_cmd("hyprshot -m region -n --raw | satty --filename -"))
