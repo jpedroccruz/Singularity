@@ -12,7 +12,7 @@ Rectangle {
 
   property color iconColor: ThemeModule.Theme.accent
   property color mutedColor: ThemeModule.Theme.muted
-  property color panelColor: ThemeModule.Theme.background
+  property color panelColor: ThemeModule.Theme.darkBackground
   property color selectorColor: ThemeModule.Theme.selector
   property color menuColor: ThemeModule.Theme.menu
   property color borderColor: ThemeModule.Theme.border

@@ -24,16 +24,15 @@ PanelWindow {
         spacing: 12
 
         Image {
-            Layout.preferredWidth: 40
-            Layout.preferredHeight: 40
+            Layout.preferredWidth: 30
+            Layout.preferredHeight: 30
             source: Qt.resolvedUrl("../modules/Bar/assets/singularity.svg")
-            fillMode: Image.PreserveAspectFit
             smooth: true
 
             Process {
                 id: launcherProc
 
-                command: ["qs", "ipc", "call", "launcher", "toggle"]
+                command: ["qs", "ipc", "call", "powermenu", "toggle"]
             }
 
             MouseArea {
@@ -48,6 +47,10 @@ PanelWindow {
         }
 
         Workspaces {
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        Song {
             Layout.alignment: Qt.AlignVCenter
         }
 

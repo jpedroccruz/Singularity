@@ -1,982 +1,971 @@
-import Quickshell
-import Quickshell.Wayland
-import Quickshell.Io
-import Quickshell.Services.Pipewire
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
+import Quickshell
+import Quickshell.Io
+import Quickshell.Services.Pipewire
+import Quickshell.Wayland
 import qs.theme as ThemeModule
 
 Rectangle {
-  id: root
+    id: root
 
-  property color iconColor: ThemeModule.Theme.accent
-  property color mutedColor: ThemeModule.Theme.muted
-  property color panelColor: ThemeModule.Theme.background
-  property color selectorColor: ThemeModule.Theme.selector
-  property color menuColor: ThemeModule.Theme.menu
-  property color borderColor: ThemeModule.Theme.border
+    property color iconColor: ThemeModule.Theme.accent
+    property color mutedColor: ThemeModule.Theme.muted
+    property color panelColor: ThemeModule.Theme.darkBackground
+    property color selectorColor: ThemeModule.Theme.selector
+    property color menuColor: ThemeModule.Theme.menu
+    property color borderColor: ThemeModule.Theme.border
+    property int edge: 20
+    property var sink: Pipewire.defaultAudioSink
+    property var source: Pipewire.defaultAudioSource
+    property var outputDevices: Pipewire.nodes.values.filter((node) => {
+        return node.isSink && !node.isStream;
+    })
+    property var inputDevices: Pipewire.nodes.values.filter((node) => {
+        return !node.isSink && !node.isStream && !node.name.endsWith(".monitor");
+    })
+    property var outputPorts: []
+    property var inputPorts: []
+    property string activeOutputPort: ""
+    property string activeInputPort: ""
+    property real volume: sink ? sink.audio.volume : 0
+    property bool muted: !sink || sink.audio.muted
+    // Nível real do sinal captado pelo microfone.
+    // PwNodePeakMonitor retorna valores entre 0.0 e 1.0.
+    property real microphonePeak: inputPeakMonitor.peak
+    property bool microphoneHasSignal: microphonePeak > 0.015
 
-  property int edge: 20
+    function volumeSymbol() {
+        if (muted || volume <= 0)
+            return "volume_off";
 
-  property var sink: Pipewire.defaultAudioSink
-  property var source: Pipewire.defaultAudioSource
+        if (volume <= 0.33)
+            return "volume_mute";
 
-  property var outputDevices: Pipewire.nodes.values.filter(
-    node => node.isSink && !node.isStream
-  )
+        if (volume <= 0.66)
+            return "volume_down";
 
-  property var inputDevices: Pipewire.nodes.values.filter(
-    node => !node.isSink && !node.isStream && !node.name.endsWith(".monitor")
-  )
-
-  property var outputPorts: []
-  property var inputPorts: []
-
-  property string activeOutputPort: ""
-  property string activeInputPort: ""
-
-  property real volume: sink ? sink.audio.volume : 0
-  property bool muted: !sink || sink.audio.muted
-
-  // Nível real do sinal captado pelo microfone.
-  // PwNodePeakMonitor retorna valores entre 0.0 e 1.0.
-  property real microphonePeak: inputPeakMonitor.peak
-
-  property bool microphoneHasSignal: microphonePeak > 0.015
-
-  function volumeSymbol() {
-    if (muted || volume <= 0) return "volume_off"
-    if (volume <= 0.33) return "volume_mute"
-    if (volume <= 0.66) return "volume_down"
-    return "volume_up"
-  }
-
-  function selectorMenuOpen() {
-    return outputSelector.popup.visible
-      || outputPortSelector.popup.visible
-      || inputSelector.popup.visible
-      || inputPortSelector.popup.visible
-  }
-
-  function parsePorts(text, kind) {
-    const node = kind === "output" ? root.sink : root.source
-    const header = kind === "output" ? /Sink #\d+/ : /Source #\d+/
-
-    if (!node) {
-      if (kind === "output") {
-        root.outputPorts = []
-        root.activeOutputPort = ""
-      } else {
-        root.inputPorts = []
-        root.activeInputPort = ""
-      }
-      return
+        return "volume_up";
     }
 
-    const blocks = text.split(header)
-    let block = ""
-
-    for (const candidate of blocks) {
-      const nameMatch = candidate.match(/^\s*Name:\s*(.+)$/m)
-
-      if (nameMatch && nameMatch[1].trim() === node.name) {
-        block = candidate
-        break
-      }
+    function selectorMenuOpen() {
+        return outputSelector.popup.visible || outputPortSelector.popup.visible || inputSelector.popup.visible || inputPortSelector.popup.visible;
     }
 
-    const ports = []
-    let activePort = ""
-    let insidePorts = false
+    function parsePorts(text, kind) {
+        const node = kind === "output" ? root.sink : root.source;
+        const header = kind === "output" ? /Sink #\d+/ : /Source #\d+/;
+        if (!node) {
+            if (kind === "output") {
+                root.outputPorts = [];
+                root.activeOutputPort = "";
+            } else {
+                root.inputPorts = [];
+                root.activeInputPort = "";
+            }
+            return ;
+        }
+        const blocks = text.split(header);
+        let block = "";
+        for (const candidate of blocks) {
+            const nameMatch = candidate.match(/^\s*Name:\s*(.+)$/m);
+            if (nameMatch && nameMatch[1].trim() === node.name) {
+                block = candidate;
+                break;
+            }
+        }
+        const ports = [];
+        let activePort = "";
+        let insidePorts = false;
+        for (const line of block.split("\n")) {
+            if (/^\s*Ports:\s*$/.test(line)) {
+                insidePorts = true;
+                continue;
+            }
+            if (!insidePorts)
+                continue;
 
-    for (const line of block.split("\n")) {
-      if (/^\s*Ports:\s*$/.test(line)) {
-        insidePorts = true
-        continue
-      }
-
-      if (!insidePorts) continue
-
-      const activeMatch = line.match(/^\s*Active Port:\s*(.+)$/)
-
-      if (activeMatch) {
-        activePort = activeMatch[1].trim()
-        break
-      }
-
-      const portMatch = line.match(/^\s+([^:\s][^:]*):\s*(.*)$/)
-
-      if (portMatch) {
-        const name = portMatch[1].trim()
-        const label = portMatch[2]
-          .replace(/\s+\(type:.*$/, "")
-          .trim()
-
-        ports.push({
-          name,
-          label: label || name
-        })
-      }
+            const activeMatch = line.match(/^\s*Active Port:\s*(.+)$/);
+            if (activeMatch) {
+                activePort = activeMatch[1].trim();
+                break;
+            }
+            const portMatch = line.match(/^\s+([^:\s][^:]*):\s*(.*)$/);
+            if (portMatch) {
+                const name = portMatch[1].trim();
+                const label = portMatch[2].replace(/\s+\(type:.*$/, "").trim();
+                ports.push({
+                    "name": name,
+                    "label": label || name
+                });
+            }
+        }
+        if (kind === "output") {
+            root.outputPorts = ports;
+            root.activeOutputPort = activePort;
+        } else {
+            root.inputPorts = ports;
+            root.activeInputPort = activePort;
+        }
     }
 
-    if (kind === "output") {
-      root.outputPorts = ports
-      root.activeOutputPort = activePort
-    } else {
-      root.inputPorts = ports
-      root.activeInputPort = activePort
+    function refreshPorts() {
+        if (root.sink)
+            outputPortsProcess.running = true;
+
+        if (root.source)
+            inputPortsProcess.running = true;
+
     }
-  }
 
-  function refreshPorts() {
-    if (root.sink)
-      outputPortsProcess.running = true
+    function setOutputPort(port) {
+        if (!root.sink || !port)
+            return ;
 
-    if (root.source)
-      inputPortsProcess.running = true
-  }
-
-  function setOutputPort(port) {
-    if (!root.sink || !port) return
-
-    setOutputPortProcess.command = [
-      "pactl", "set-sink-port", root.sink.name, port
-    ]
-    setOutputPortProcess.running = true
-  }
-
-  function setInputPort(port) {
-    if (!root.source || !port) return
-
-    setInputPortProcess.command = [
-      "pactl", "set-source-port", root.source.name, port
-    ]
-    setInputPortProcess.running = true
-  }
-
-  onSinkChanged: refreshPorts()
-  onSourceChanged: refreshPorts()
-
-  Component.onCompleted: refreshPorts()
-
-  implicitWidth: indicator.implicitWidth + 18
-  implicitHeight: 30
-  color: "transparent"
-
-  PwObjectTracker {
-    objects: Pipewire.nodes.values.filter(
-      node => node.audio && !node.isStream
-    )
-  }
-
-  // Monitor nativo do PipeWire integrado ao Quickshell.
-  PwNodePeakMonitor {
-    id: inputPeakMonitor
-
-    node: root.source
-    enabled: popup.visible && !!root.source
-  }
-
-  Process {
-    id: outputPortsProcess
-    command: ["pactl", "list", "sinks"]
-
-    stdout: StdioCollector {
-      onStreamFinished: root.parsePorts(this.text, "output")
+        setOutputPortProcess.command = ["pactl", "set-sink-port", root.sink.name, port];
+        setOutputPortProcess.running = true;
     }
-  }
 
-  Process {
-    id: inputPortsProcess
-    command: ["pactl", "list", "sources"]
+    function setInputPort(port) {
+        if (!root.source || !port)
+            return ;
 
-    stdout: StdioCollector {
-      onStreamFinished: root.parsePorts(this.text, "input")
+        setInputPortProcess.command = ["pactl", "set-source-port", root.source.name, port];
+        setInputPortProcess.running = true;
     }
-  }
 
-  Process {
-    id: setOutputPortProcess
-
-    onExited: {
-      refreshTimer.restart()
-    }
-  }
-
-  Process {
-    id: setInputPortProcess
-
-    onExited: {
-      refreshTimer.restart()
-    }
-  }
-
-  Timer {
-    id: refreshTimer
-    interval: 250
-    onTriggered: root.refreshPorts()
-  }
-
-  Timer {
-    id: closeTimer
-    interval: 180
-
-    onTriggered: {
-      if (
-        !mouseArea.containsMouse
-        && !panelHover.hovered
-        && !root.selectorMenuOpen()
-      ) {
-        popup.visible = false
-      }
-    }
-  }
-
-  Text {
-    id: indicator
-    anchors.centerIn: parent
-    text: root.volumeSymbol()
-    color: root.iconColor
-    font.family: "Material Symbols Rounded"
-    font.pixelSize: 22
-  }
-
-  Rectangle {
-    anchors.bottom: parent.bottom
-    anchors.horizontalCenter: parent.horizontalCenter
-    width: indicator.implicitWidth
-    height: 2
-    radius: height / 2
-    color: root.iconColor
-    visible: mouseArea.containsMouse
-  }
-
-  MouseArea {
-    id: mouseArea
-    anchors.fill: parent
-    hoverEnabled: true
-    cursorShape: Qt.PointingHandCursor
-
-    onEntered: closeTimer.stop()
-    onExited: closeTimer.restart()
-
-    onClicked: {
-      popup.visible = !popup.visible
-
-      if (popup.visible)
-        root.refreshPorts()
-    }
-  }
-
-  PanelWindow {
-    id: popup
-
-    screen: root.QsWindow.window.screen
-    anchors {
-      top: true
-      right: true
-    }
-    margins.top: root.QsWindow.window.height
-    exclusionMode: ExclusionMode.Ignore
-
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "bar-popup"
-
-    implicitWidth: 340 + root.edge
-    implicitHeight: panel.implicitHeight + 4
-
-    visible: false
+    onSinkChanged: refreshPorts()
+    onSourceChanged: refreshPorts()
+    Component.onCompleted: refreshPorts()
+    implicitWidth: indicator.implicitWidth + 18
+    implicitHeight: 30
     color: "transparent"
 
-    Shape {
-      anchors.left: parent.left
-      anchors.top: parent.top
-      width: root.edge
-      height: root.edge
-      preferredRendererType: Shape.CurveRenderer
+    PwObjectTracker {
+        objects: Pipewire.nodes.values.filter((node) => {
+            return node.audio && !node.isStream;
+        })
+    }
 
-      ShapePath {
-        strokeWidth: 0
-        fillColor: root.panelColor
-        startX: root.edge
-        startY: 0
+    // Monitor nativo do PipeWire integrado ao Quickshell.
+    PwNodePeakMonitor {
+        id: inputPeakMonitor
 
-        PathLine { x: root.edge; y: root.edge }
-        PathArc {
-          x: 0
-          y: 0
-          radiusX: root.edge
-          radiusY: root.edge
-          direction: PathArc.Counterclockwise
+        node: root.source
+        enabled: popup.visible && !!root.source
+    }
+
+    Process {
+        id: outputPortsProcess
+
+        command: ["pactl", "list", "sinks"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.parsePorts(this.text, "output")
         }
-        PathLine { x: root.edge; y: 0 }
-      }
+
+    }
+
+    Process {
+        id: inputPortsProcess
+
+        command: ["pactl", "list", "sources"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.parsePorts(this.text, "input")
+        }
+
+    }
+
+    Process {
+        id: setOutputPortProcess
+
+        onExited: {
+            refreshTimer.restart();
+        }
+    }
+
+    Process {
+        id: setInputPortProcess
+
+        onExited: {
+            refreshTimer.restart();
+        }
+    }
+
+    Timer {
+        id: refreshTimer
+
+        interval: 250
+        onTriggered: root.refreshPorts()
+    }
+
+    Timer {
+        id: closeTimer
+
+        interval: 180
+        onTriggered: {
+            if (!mouseArea.containsMouse && !panelHover.hovered && !root.selectorMenuOpen())
+                popup.visible = false;
+
+        }
+    }
+
+    Text {
+        id: indicator
+
+        anchors.centerIn: parent
+        text: root.volumeSymbol()
+        color: root.iconColor
+        font.family: "Material Symbols Rounded"
+        font.pixelSize: 22
     }
 
     Rectangle {
-      id: panel
-      anchors.fill: parent
-      anchors.leftMargin: root.edge
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: indicator.implicitWidth
+        height: 2
+        radius: height / 2
+        color: root.iconColor
+        visible: mouseArea.containsMouse
+    }
 
-      color: root.panelColor
-      bottomLeftRadius: root.edge
+    MouseArea {
+        id: mouseArea
 
-      implicitHeight: content.implicitHeight + 24
-
-      HoverHandler {
-        id: panelHover
-
-        onHoveredChanged: {
-          if (hovered)
-            closeTimer.stop()
-          else
-            closeTimer.restart()
-        }
-      }
-
-      ColumnLayout {
-        id: content
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 16
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onEntered: closeTimer.stop()
+        onExited: closeTimer.restart()
+        onClicked: {
+            popup.visible = !popup.visible;
+            if (popup.visible)
+                root.refreshPorts();
 
-        // SAÍDA DE ÁUDIO
+        }
+    }
 
-        ColumnLayout {
-          Layout.fillWidth: true
-          spacing: 10
+    PanelWindow {
+        id: popup
 
-          Text {
-            text: "OUTPUT"
-            color: root.iconColor
-            font.family: "Rubik"
-            font.pixelSize: 13
-            font.bold: true
-          }
+        screen: root.QsWindow.window.screen
+        margins.top: root.QsWindow.window.height
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "bar-popup"
+        implicitWidth: 340 + root.edge
+        implicitHeight: panel.implicitHeight + 4
+        visible: false
+        color: "transparent"
 
-          ComboBox {
-            id: outputSelector
+        anchors {
+            top: true
+            right: true
+        }
 
-            Layout.fillWidth: true
-            implicitHeight: 42
-            model: root.outputDevices
-            textRole: "description"
+        Shape {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            width: root.edge
+            height: root.edge
+            preferredRendererType: Shape.CurveRenderer
 
-            currentIndex: {
-              if (!root.sink) return -1
-              return root.outputDevices.findIndex(
-                device => device.id === root.sink.id
-              )
-            }
+            ShapePath {
+                strokeWidth: 0
+                fillColor: root.panelColor
+                startX: root.edge
+                startY: 0
 
-            onActivated: index => {
-              if (index >= 0) {
-                Pipewire.preferredDefaultAudioSink =
-                  root.outputDevices[index]
-
-                refreshTimer.restart()
-              }
-            }
-
-            background: Rectangle {
-              color: root.selectorColor
-              radius: 7
-              border.width: 1
-              border.color: root.borderColor
-            }
-
-            contentItem: Text {
-              leftPadding: 12
-              rightPadding: 30
-              text: outputSelector.displayText
-              color: root.iconColor
-              font.family: "Rubik"
-              font.pixelSize: 14
-              verticalAlignment: Text.AlignVCenter
-              elide: Text.ElideRight
-            }
-
-            indicator: Text {
-              x: outputSelector.width - width - 10
-              anchors.verticalCenter: parent.verticalCenter
-              text: "arrow_drop_down"
-              color: root.iconColor
-              font.family: "Material Symbols Rounded"
-              font.pixelSize: 24
-            }
-
-            popup: Popup {
-              y: outputSelector.height + 4
-              width: outputSelector.width
-              padding: 4
-
-              onAboutToShow: closeTimer.stop()
-
-              onClosed: {
-                if (!mouseArea.containsMouse && !panelHover.hovered)
-                  closeTimer.restart()
-              }
-
-              background: Rectangle {
-                color: root.panelColor
-                border.width: 1
-                border.color: root.borderColor
-                radius: 7
-              }
-
-              contentItem: ListView {
-                clip: true
-                implicitHeight: Math.min(contentHeight, 190)
-                model: outputSelector.delegateModel
-                currentIndex: outputSelector.highlightedIndex
-                boundsBehavior: Flickable.StopAtBounds
-
-                ScrollIndicator.vertical: ScrollIndicator {}
-              }
-            }
-
-            delegate: ItemDelegate {
-              width: outputSelector.width - 8
-              implicitHeight: 38
-              highlighted: outputSelector.highlightedIndex === index
-
-              background: Rectangle {
-                color: parent.highlighted
-                  ? root.borderColor
-                  : root.menuColor
-                radius: 5
-              }
-
-              contentItem: Text {
-                text: modelData.description
-                color: root.iconColor
-                font.family: "Rubik"
-                font.pixelSize: 13
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                leftPadding: 8
-              }
-            }
-          }
-
-          ComboBox {
-            id: outputPortSelector
-
-            Layout.fillWidth: true
-            implicitHeight: 42
-            model: root.outputPorts
-            textRole: "label"
-            enabled: root.outputPorts.length > 0
-
-            currentIndex: {
-              if (!root.activeOutputPort) return -1
-              return root.outputPorts.findIndex(
-                port => port.name === root.activeOutputPort
-              )
-            }
-
-            onActivated: index => {
-              if (index >= 0)
-                root.setOutputPort(root.outputPorts[index].name)
-            }
-
-            background: Rectangle {
-              color: root.selectorColor
-              radius: 7
-              border.width: 1
-              border.color: root.borderColor
-            }
-
-            contentItem: Text {
-              leftPadding: 12
-              rightPadding: 30
-              text: outputPortSelector.displayText || "Selecione uma porta"
-              color: root.outputPorts.length
-                ? root.iconColor : root.mutedColor
-              font.family: "Rubik"
-              font.pixelSize: 14
-              verticalAlignment: Text.AlignVCenter
-              elide: Text.ElideRight
-            }
-
-            indicator: Text {
-              x: outputPortSelector.width - width - 10
-              anchors.verticalCenter: parent.verticalCenter
-              text: "arrow_drop_down"
-              color: root.iconColor
-              font.family: "Material Symbols Rounded"
-              font.pixelSize: 24
-            }
-
-            popup: Popup {
-              y: outputPortSelector.height + 4
-              width: outputPortSelector.width
-              padding: 4
-
-              onAboutToShow: closeTimer.stop()
-
-              onClosed: {
-                if (!mouseArea.containsMouse && !panelHover.hovered)
-                  closeTimer.restart()
-              }
-
-              background: Rectangle {
-                color: root.panelColor
-                border.width: 1
-                border.color: root.borderColor
-                radius: 7
-              }
-
-              contentItem: ListView {
-                clip: true
-                implicitHeight: Math.min(contentHeight, 190)
-                model: outputPortSelector.delegateModel
-                currentIndex: outputPortSelector.highlightedIndex
-                boundsBehavior: Flickable.StopAtBounds
-
-                ScrollIndicator.vertical: ScrollIndicator {}
-              }
-            }
-
-            delegate: ItemDelegate {
-              width: outputPortSelector.width - 8
-              implicitHeight: 38
-              highlighted: outputPortSelector.highlightedIndex === index
-
-              background: Rectangle {
-                color: parent.highlighted
-                  ? root.borderColor
-                  : root.menuColor
-                radius: 5
-              }
-
-              contentItem: Text {
-                text: modelData.label
-                color: root.iconColor
-                font.family: "Rubik"
-                font.pixelSize: 13
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                leftPadding: 8
-              }
-            }
-          }
-
-          RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-
-            Text {
-              text: "volume_up"
-              color: root.iconColor
-              font.family: "Material Symbols Rounded"
-              font.pixelSize: 22
-            }
-
-            Slider {
-              id: outputSlider
-
-              Layout.fillWidth: true
-              implicitHeight: 30
-              from: 0
-              to: 1
-              value: root.sink ? root.sink.audio.volume : 0
-              enabled: !!root.sink
-
-              onMoved: {
-                if (root.sink)
-                  root.sink.audio.volume = value
-              }
-
-              background: Rectangle {
-                x: outputSlider.leftPadding
-                y: outputSlider.topPadding
-                   + outputSlider.availableHeight / 2 - height / 2
-                width: outputSlider.availableWidth
-                height: 4
-                radius: 2
-                color: root.borderColor
-
-                Rectangle {
-                  width: outputSlider.visualPosition * parent.width
-                  height: parent.height
-                  radius: 2
-                  color: root.iconColor
+                PathLine {
+                    x: root.edge
+                    y: root.edge
                 }
-              }
 
-              handle: Rectangle {
-                x: outputSlider.leftPadding
-                   + outputSlider.visualPosition
-                   * (outputSlider.availableWidth - width)
-                y: outputSlider.topPadding
-                   + outputSlider.availableHeight / 2 - height / 2
-                width: 14
-                height: 14
-                radius: width / 2
-                color: root.iconColor
-                border.width: 2
-                border.color: root.panelColor
-              }
+                PathArc {
+                    x: 0
+                    y: 0
+                    radiusX: root.edge
+                    radiusY: root.edge
+                    direction: PathArc.Counterclockwise
+                }
+
+                PathLine {
+                    x: root.edge
+                    y: 0
+                }
+
             }
 
-            Text {
-              Layout.preferredWidth: 42
-              horizontalAlignment: Text.AlignRight
-              text: Math.round(outputSlider.value * 100) + "%"
-              color: root.iconColor
-              font.family: "Rubik"
-              font.pixelSize: 13
-            }
-          }
         }
 
         Rectangle {
-          Layout.fillWidth: true
-          height: 1
-          color: root.borderColor
-        }
+            id: panel
 
-        // ENTRADA DE ÁUDIO
+            anchors.fill: parent
+            anchors.leftMargin: root.edge
+            color: root.panelColor
+            bottomLeftRadius: root.edge
+            implicitHeight: content.implicitHeight + 24
 
-        ColumnLayout {
-          Layout.fillWidth: true
-          spacing: 10
+            HoverHandler {
+                id: panelHover
 
-          Text {
-            text: "INPUT"
-            color: root.iconColor
-            font.family: "Rubik"
-            font.pixelSize: 13
-            font.bold: true
-          }
-
-          ComboBox {
-            id: inputSelector
-
-            Layout.fillWidth: true
-            implicitHeight: 42
-            model: root.inputDevices
-            textRole: "description"
-
-            currentIndex: {
-              if (!root.source) return -1
-              return root.inputDevices.findIndex(
-                device => device.id === root.source.id
-              )
+                onHoveredChanged: {
+                    if (hovered)
+                        closeTimer.stop();
+                    else
+                        closeTimer.restart();
+                }
             }
 
-            onActivated: index => {
-              if (index >= 0) {
-                Pipewire.preferredDefaultAudioSource =
-                  root.inputDevices[index]
+            ColumnLayout {
+                // SAÍDA DE ÁUDIO
+                // ENTRADA DE ÁUDIO
 
-                refreshTimer.restart()
-              }
-            }
+                id: content
 
-            background: Rectangle {
-              color: root.selectorColor
-              radius: 7
-              border.width: 1
-              border.color: root.borderColor
-            }
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 16
 
-            contentItem: Text {
-              leftPadding: 12
-              rightPadding: 30
-              text: inputSelector.displayText
-              color: root.iconColor
-              font.family: "Rubik"
-              font.pixelSize: 14
-              verticalAlignment: Text.AlignVCenter
-              elide: Text.ElideRight
-            }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
 
-            indicator: Text {
-              x: inputSelector.width - width - 10
-              anchors.verticalCenter: parent.verticalCenter
-              text: "arrow_drop_down"
-              color: root.iconColor
-              font.family: "Material Symbols Rounded"
-              font.pixelSize: 24
-            }
+                    Text {
+                        text: "OUTPUT"
+                        color: root.iconColor
+                        font.family: "Rubik"
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
 
-            popup: Popup {
-              y: inputSelector.height + 4
-              width: inputSelector.width
-              padding: 4
+                    ComboBox {
+                        id: outputSelector
 
-              onAboutToShow: closeTimer.stop()
+                        Layout.fillWidth: true
+                        implicitHeight: 42
+                        model: root.outputDevices
+                        textRole: "description"
+                        currentIndex: {
+                            if (!root.sink)
+                                return -1;
 
-              onClosed: {
-                if (!mouseArea.containsMouse && !panelHover.hovered)
-                  closeTimer.restart()
-              }
+                            return root.outputDevices.findIndex((device) => {
+                                return device.id === root.sink.id;
+                            });
+                        }
+                        onActivated: (index) => {
+                            if (index >= 0) {
+                                Pipewire.preferredDefaultAudioSink = root.outputDevices[index];
+                                refreshTimer.restart();
+                            }
+                        }
 
-              background: Rectangle {
-                color: root.panelColor
-                border.width: 1
-                border.color: root.borderColor
-                radius: 7
-              }
+                        background: Rectangle {
+                            color: root.selectorColor
+                            radius: 7
+                            border.width: 1
+                            border.color: root.borderColor
+                        }
 
-              contentItem: ListView {
-                clip: true
-                implicitHeight: Math.min(contentHeight, 190)
-                model: inputSelector.delegateModel
-                currentIndex: inputSelector.highlightedIndex
-                boundsBehavior: Flickable.StopAtBounds
+                        contentItem: Text {
+                            leftPadding: 12
+                            rightPadding: 30
+                            text: outputSelector.displayText
+                            color: root.iconColor
+                            font.family: "Rubik"
+                            font.pixelSize: 14
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
 
-                ScrollIndicator.vertical: ScrollIndicator {}
-              }
-            }
+                        indicator: Text {
+                            x: outputSelector.width - width - 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "arrow_drop_down"
+                            color: root.iconColor
+                            font.family: "Material Symbols Rounded"
+                            font.pixelSize: 24
+                        }
 
-            delegate: ItemDelegate {
-              width: inputSelector.width - 8
-              implicitHeight: 38
-              highlighted: inputSelector.highlightedIndex === index
+                        popup: Popup {
+                            y: outputSelector.height + 4
+                            width: outputSelector.width
+                            padding: 4
+                            onAboutToShow: closeTimer.stop()
+                            onClosed: {
+                                if (!mouseArea.containsMouse && !panelHover.hovered)
+                                    closeTimer.restart();
 
-              background: Rectangle {
-                color: parent.highlighted
-                  ? root.borderColor
-                  : root.menuColor
-                radius: 5
-              }
+                            }
 
-              contentItem: Text {
-                text: modelData.description
-                color: root.iconColor
-                font.family: "Rubik"
-                font.pixelSize: 13
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                leftPadding: 8
-              }
-            }
-          }
+                            background: Rectangle {
+                                color: root.panelColor
+                                border.width: 1
+                                border.color: root.borderColor
+                                radius: 7
+                            }
 
-          ComboBox {
-            id: inputPortSelector
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: Math.min(contentHeight, 190)
+                                model: outputSelector.delegateModel
+                                currentIndex: outputSelector.highlightedIndex
+                                boundsBehavior: Flickable.StopAtBounds
 
-            Layout.fillWidth: true
-            implicitHeight: 42
-            model: root.inputPorts
-            textRole: "label"
-            enabled: root.inputPorts.length > 0
+                                ScrollIndicator.vertical: ScrollIndicator {
+                                }
 
-            currentIndex: {
-              if (!root.activeInputPort) return -1
-              return root.inputPorts.findIndex(
-                port => port.name === root.activeInputPort
-              )
-            }
+                            }
 
-            onActivated: index => {
-              if (index >= 0)
-                root.setInputPort(root.inputPorts[index].name)
-            }
+                        }
 
-            background: Rectangle {
-              color: root.selectorColor
-              radius: 7
-              border.width: 1
-              border.color: root.borderColor
-            }
+                        delegate: ItemDelegate {
+                            width: outputSelector.width - 8
+                            implicitHeight: 38
+                            highlighted: outputSelector.highlightedIndex === index
 
-            contentItem: Text {
-              leftPadding: 12
-              rightPadding: 30
-              text: inputPortSelector.displayText || "Selecione uma porta"
-              color: root.inputPorts.length
-                ? root.iconColor : root.mutedColor
-              font.family: "Rubik"
-              font.pixelSize: 14
-              verticalAlignment: Text.AlignVCenter
-              elide: Text.ElideRight
-            }
+                            background: Rectangle {
+                                color: parent.highlighted ? root.borderColor : root.menuColor
+                                radius: 5
+                            }
 
-            indicator: Text {
-              x: inputPortSelector.width - width - 10
-              anchors.verticalCenter: parent.verticalCenter
-              text: "arrow_drop_down"
-              color: root.iconColor
-              font.family: "Material Symbols Rounded"
-              font.pixelSize: 24
-            }
+                            contentItem: Text {
+                                text: modelData.description
+                                color: root.iconColor
+                                font.family: "Rubik"
+                                font.pixelSize: 13
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                leftPadding: 8
+                            }
 
-            popup: Popup {
-              y: inputPortSelector.height + 4
-              width: inputPortSelector.width
-              padding: 4
+                        }
 
-              onAboutToShow: closeTimer.stop()
+                    }
 
-              onClosed: {
-                if (!mouseArea.containsMouse && !panelHover.hovered)
-                  closeTimer.restart()
-              }
+                    ComboBox {
+                        id: outputPortSelector
 
-              background: Rectangle {
-                color: root.panelColor
-                border.width: 1
-                border.color: root.borderColor
-                radius: 7
-              }
+                        Layout.fillWidth: true
+                        implicitHeight: 42
+                        model: root.outputPorts
+                        textRole: "label"
+                        enabled: root.outputPorts.length > 0
+                        currentIndex: {
+                            if (!root.activeOutputPort)
+                                return -1;
 
-              contentItem: ListView {
-                clip: true
-                implicitHeight: Math.min(contentHeight, 190)
-                model: inputPortSelector.delegateModel
-                currentIndex: inputPortSelector.highlightedIndex
-                boundsBehavior: Flickable.StopAtBounds
+                            return root.outputPorts.findIndex((port) => {
+                                return port.name === root.activeOutputPort;
+                            });
+                        }
+                        onActivated: (index) => {
+                            if (index >= 0)
+                                root.setOutputPort(root.outputPorts[index].name);
 
-                ScrollIndicator.vertical: ScrollIndicator {}
-              }
-            }
+                        }
 
-            delegate: ItemDelegate {
-              width: inputPortSelector.width - 8
-              implicitHeight: 38
-              highlighted: inputPortSelector.highlightedIndex === index
+                        background: Rectangle {
+                            color: root.selectorColor
+                            radius: 7
+                            border.width: 1
+                            border.color: root.borderColor
+                        }
 
-              background: Rectangle {
-                color: parent.highlighted
-                  ? root.borderColor
-                  : root.menuColor
-                radius: 5
-              }
+                        contentItem: Text {
+                            leftPadding: 12
+                            rightPadding: 30
+                            text: outputPortSelector.displayText || "Selecione uma porta"
+                            color: root.outputPorts.length ? root.iconColor : root.mutedColor
+                            font.family: "Rubik"
+                            font.pixelSize: 14
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
 
-              contentItem: Text {
-                text: modelData.label
-                color: root.iconColor
-                font.family: "Rubik"
-                font.pixelSize: 13
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                leftPadding: 8
-              }
-            }
-          }
+                        indicator: Text {
+                            x: outputPortSelector.width - width - 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "arrow_drop_down"
+                            color: root.iconColor
+                            font.family: "Material Symbols Rounded"
+                            font.pixelSize: 24
+                        }
 
-          RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
+                        popup: Popup {
+                            y: outputPortSelector.height + 4
+                            width: outputPortSelector.width
+                            padding: 4
+                            onAboutToShow: closeTimer.stop()
+                            onClosed: {
+                                if (!mouseArea.containsMouse && !panelHover.hovered)
+                                    closeTimer.restart();
 
-            Text {
-              text: "mic"
-              color: root.iconColor
-              font.family: "Material Symbols Rounded"
-              font.pixelSize: 22
-            }
+                            }
 
-            Slider {
-              id: inputSlider
+                            background: Rectangle {
+                                color: root.panelColor
+                                border.width: 1
+                                border.color: root.borderColor
+                                radius: 7
+                            }
 
-              Layout.fillWidth: true
-              implicitHeight: 30
-              from: 0
-              to: 1
-              value: root.source ? root.source.audio.volume : 0
-              enabled: !!root.source
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: Math.min(contentHeight, 190)
+                                model: outputPortSelector.delegateModel
+                                currentIndex: outputPortSelector.highlightedIndex
+                                boundsBehavior: Flickable.StopAtBounds
 
-              onMoved: {
-                if (root.source)
-                  root.source.audio.volume = value
-              }
+                                ScrollIndicator.vertical: ScrollIndicator {
+                                }
 
-              background: Rectangle {
-                x: inputSlider.leftPadding
-                y: inputSlider.topPadding
-                   + inputSlider.availableHeight / 2 - height / 2
-                width: inputSlider.availableWidth
-                height: 4
-                radius: 2
-                color: root.borderColor
+                            }
+
+                        }
+
+                        delegate: ItemDelegate {
+                            width: outputPortSelector.width - 8
+                            implicitHeight: 38
+                            highlighted: outputPortSelector.highlightedIndex === index
+
+                            background: Rectangle {
+                                color: parent.highlighted ? root.borderColor : root.menuColor
+                                radius: 5
+                            }
+
+                            contentItem: Text {
+                                text: modelData.label
+                                color: root.iconColor
+                                font.family: "Rubik"
+                                font.pixelSize: 13
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                leftPadding: 8
+                            }
+
+                        }
+
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Text {
+                            text: "volume_up"
+                            color: root.iconColor
+                            font.family: "Material Symbols Rounded"
+                            font.pixelSize: 22
+                        }
+
+                        Slider {
+                            id: outputSlider
+
+                            Layout.fillWidth: true
+                            implicitHeight: 30
+                            from: 0
+                            to: 1
+                            value: root.sink ? root.sink.audio.volume : 0
+                            enabled: !!root.sink
+                            onMoved: {
+                                if (root.sink)
+                                    root.sink.audio.volume = value;
+
+                            }
+
+                            background: Rectangle {
+                                x: outputSlider.leftPadding
+                                y: outputSlider.topPadding + outputSlider.availableHeight / 2 - height / 2
+                                width: outputSlider.availableWidth
+                                height: 4
+                                radius: 2
+                                color: root.borderColor
+
+                                Rectangle {
+                                    width: outputSlider.visualPosition * parent.width
+                                    height: parent.height
+                                    radius: 2
+                                    color: root.iconColor
+                                }
+
+                            }
+
+                            handle: Rectangle {
+                                x: outputSlider.leftPadding + outputSlider.visualPosition * (outputSlider.availableWidth - width)
+                                y: outputSlider.topPadding + outputSlider.availableHeight / 2 - height / 2
+                                width: 14
+                                height: 14
+                                radius: width / 2
+                                color: root.iconColor
+                                border.width: 2
+                                border.color: root.panelColor
+                            }
+
+                        }
+
+                        Text {
+                            Layout.preferredWidth: 42
+                            horizontalAlignment: Text.AlignRight
+                            text: Math.round(outputSlider.value * 100) + "%"
+                            color: root.iconColor
+                            font.family: "Rubik"
+                            font.pixelSize: 13
+                        }
+
+                    }
+
+                }
 
                 Rectangle {
-                  width: inputSlider.visualPosition * parent.width
-                  height: parent.height
-                  radius: 2
-                  color: root.iconColor
+                    Layout.fillWidth: true
+                    height: 1
+                    color: root.borderColor
                 }
-              }
 
-              handle: Rectangle {
-                x: inputSlider.leftPadding
-                   + inputSlider.visualPosition
-                   * (inputSlider.availableWidth - width)
-                y: inputSlider.topPadding
-                   + inputSlider.availableHeight / 2 - height / 2
-                width: 14
-                height: 14
-                radius: width / 2
-                color: root.iconColor
-                border.width: 2
-                border.color: root.panelColor
-              }
-            }
+                ColumnLayout {
+                    // MEDIDOR DE SINAL DO MICROFONE
 
-            Text {
-              Layout.preferredWidth: 42
-              horizontalAlignment: Text.AlignRight
-              text: Math.round(inputSlider.value * 100) + "%"
-              color: root.iconColor
-              font.family: "Rubik"
-              font.pixelSize: 13
-            }
-          }
+                    Layout.fillWidth: true
+                    spacing: 10
 
-          // MEDIDOR DE SINAL DO MICROFONE
+                    Text {
+                        text: "INPUT"
+                        color: root.iconColor
+                        font.family: "Rubik"
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
 
-          ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 7
+                    ComboBox {
+                        id: inputSelector
 
-            RowLayout {
-              Layout.fillWidth: true
+                        Layout.fillWidth: true
+                        implicitHeight: 42
+                        model: root.inputDevices
+                        textRole: "description"
+                        currentIndex: {
+                            if (!root.source)
+                                return -1;
 
-              Item {
-                Layout.fillWidth: true
-              }
-            }
+                            return root.inputDevices.findIndex((device) => {
+                                return device.id === root.source.id;
+                            });
+                        }
+                        onActivated: (index) => {
+                            if (index >= 0) {
+                                Pipewire.preferredDefaultAudioSource = root.inputDevices[index];
+                                refreshTimer.restart();
+                            }
+                        }
 
-            Rectangle {
-              Layout.fillWidth: true
-              implicitHeight: 7
+                        background: Rectangle {
+                            color: root.selectorColor
+                            radius: 7
+                            border.width: 1
+                            border.color: root.borderColor
+                        }
 
-              radius: 3.5
-              color: root.selectorColor
-              clip: true
+                        contentItem: Text {
+                            leftPadding: 12
+                            rightPadding: 30
+                            text: inputSelector.displayText
+                            color: root.iconColor
+                            font.family: "Rubik"
+                            font.pixelSize: 14
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
 
-              Rectangle {
-                width: parent.width * Math.max(
-                  0,
-                  Math.min(1, root.microphonePeak)
-                )
+                        indicator: Text {
+                            x: inputSelector.width - width - 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "arrow_drop_down"
+                            color: root.iconColor
+                            font.family: "Material Symbols Rounded"
+                            font.pixelSize: 24
+                        }
 
-                height: parent.height
-                radius: parent.radius
+                        popup: Popup {
+                            y: inputSelector.height + 4
+                            width: inputSelector.width
+                            padding: 4
+                            onAboutToShow: closeTimer.stop()
+                            onClosed: {
+                                if (!mouseArea.containsMouse && !panelHover.hovered)
+                                    closeTimer.restart();
 
-                color: root.source && root.source.audio.muted
-                  ? root.mutedColor
-                  : root.microphonePeak > 0.85
-                    ? ThemeModule.Theme.error
-                    : root.iconColor
+                            }
 
-                Behavior on width {
-                  NumberAnimation {
-                    duration: 70
-                    easing.type: Easing.OutCubic
-                  }
+                            background: Rectangle {
+                                color: root.panelColor
+                                border.width: 1
+                                border.color: root.borderColor
+                                radius: 7
+                            }
+
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: Math.min(contentHeight, 190)
+                                model: inputSelector.delegateModel
+                                currentIndex: inputSelector.highlightedIndex
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                ScrollIndicator.vertical: ScrollIndicator {
+                                }
+
+                            }
+
+                        }
+
+                        delegate: ItemDelegate {
+                            width: inputSelector.width - 8
+                            implicitHeight: 38
+                            highlighted: inputSelector.highlightedIndex === index
+
+                            background: Rectangle {
+                                color: parent.highlighted ? root.borderColor : root.menuColor
+                                radius: 5
+                            }
+
+                            contentItem: Text {
+                                text: modelData.description
+                                color: root.iconColor
+                                font.family: "Rubik"
+                                font.pixelSize: 13
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                leftPadding: 8
+                            }
+
+                        }
+
+                    }
+
+                    ComboBox {
+                        id: inputPortSelector
+
+                        Layout.fillWidth: true
+                        implicitHeight: 42
+                        model: root.inputPorts
+                        textRole: "label"
+                        enabled: root.inputPorts.length > 0
+                        currentIndex: {
+                            if (!root.activeInputPort)
+                                return -1;
+
+                            return root.inputPorts.findIndex((port) => {
+                                return port.name === root.activeInputPort;
+                            });
+                        }
+                        onActivated: (index) => {
+                            if (index >= 0)
+                                root.setInputPort(root.inputPorts[index].name);
+
+                        }
+
+                        background: Rectangle {
+                            color: root.selectorColor
+                            radius: 7
+                            border.width: 1
+                            border.color: root.borderColor
+                        }
+
+                        contentItem: Text {
+                            leftPadding: 12
+                            rightPadding: 30
+                            text: inputPortSelector.displayText || "Selecione uma porta"
+                            color: root.inputPorts.length ? root.iconColor : root.mutedColor
+                            font.family: "Rubik"
+                            font.pixelSize: 14
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+
+                        indicator: Text {
+                            x: inputPortSelector.width - width - 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "arrow_drop_down"
+                            color: root.iconColor
+                            font.family: "Material Symbols Rounded"
+                            font.pixelSize: 24
+                        }
+
+                        popup: Popup {
+                            y: inputPortSelector.height + 4
+                            width: inputPortSelector.width
+                            padding: 4
+                            onAboutToShow: closeTimer.stop()
+                            onClosed: {
+                                if (!mouseArea.containsMouse && !panelHover.hovered)
+                                    closeTimer.restart();
+
+                            }
+
+                            background: Rectangle {
+                                color: root.panelColor
+                                border.width: 1
+                                border.color: root.borderColor
+                                radius: 7
+                            }
+
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: Math.min(contentHeight, 190)
+                                model: inputPortSelector.delegateModel
+                                currentIndex: inputPortSelector.highlightedIndex
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                ScrollIndicator.vertical: ScrollIndicator {
+                                }
+
+                            }
+
+                        }
+
+                        delegate: ItemDelegate {
+                            width: inputPortSelector.width - 8
+                            implicitHeight: 38
+                            highlighted: inputPortSelector.highlightedIndex === index
+
+                            background: Rectangle {
+                                color: parent.highlighted ? root.borderColor : root.menuColor
+                                radius: 5
+                            }
+
+                            contentItem: Text {
+                                text: modelData.label
+                                color: root.iconColor
+                                font.family: "Rubik"
+                                font.pixelSize: 13
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                leftPadding: 8
+                            }
+
+                        }
+
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Text {
+                            text: "mic"
+                            color: root.iconColor
+                            font.family: "Material Symbols Rounded"
+                            font.pixelSize: 22
+                        }
+
+                        Slider {
+                            id: inputSlider
+
+                            Layout.fillWidth: true
+                            implicitHeight: 30
+                            from: 0
+                            to: 1
+                            value: root.source ? root.source.audio.volume : 0
+                            enabled: !!root.source
+                            onMoved: {
+                                if (root.source)
+                                    root.source.audio.volume = value;
+
+                            }
+
+                            background: Rectangle {
+                                x: inputSlider.leftPadding
+                                y: inputSlider.topPadding + inputSlider.availableHeight / 2 - height / 2
+                                width: inputSlider.availableWidth
+                                height: 4
+                                radius: 2
+                                color: root.borderColor
+
+                                Rectangle {
+                                    width: inputSlider.visualPosition * parent.width
+                                    height: parent.height
+                                    radius: 2
+                                    color: root.iconColor
+                                }
+
+                            }
+
+                            handle: Rectangle {
+                                x: inputSlider.leftPadding + inputSlider.visualPosition * (inputSlider.availableWidth - width)
+                                y: inputSlider.topPadding + inputSlider.availableHeight / 2 - height / 2
+                                width: 14
+                                height: 14
+                                radius: width / 2
+                                color: root.iconColor
+                                border.width: 2
+                                border.color: root.panelColor
+                            }
+
+                        }
+
+                        Text {
+                            Layout.preferredWidth: 42
+                            horizontalAlignment: Text.AlignRight
+                            text: Math.round(inputSlider.value * 100) + "%"
+                            color: root.iconColor
+                            font.family: "Rubik"
+                            font.pixelSize: 13
+                        }
+
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+
+                        RowLayout {
+                            Layout.fillWidth: true
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 7
+                            radius: 3.5
+                            color: root.selectorColor
+                            clip: true
+
+                            Rectangle {
+                                width: parent.width * Math.max(0, Math.min(1, root.microphonePeak))
+                                height: parent.height
+                                radius: parent.radius
+                                color: root.source && root.source.audio.muted ? root.mutedColor : root.microphonePeak > 0.85 ? ThemeModule.Theme.error : root.iconColor
+
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: 70
+                                        easing.type: Easing.OutCubic
+                                    }
+
+                                }
+
+                            }
+
+                        }
+
+                    }
+
                 }
-              }
+
             }
-          }
+
         }
-      }
+
     }
-  }
+
 }
