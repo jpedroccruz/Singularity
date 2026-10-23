@@ -17,6 +17,7 @@ PanelWindow {
         right: true
     }
 
+    // LEFT
     RowLayout {
         anchors.left: parent.left
         anchors.leftMargin: 14
@@ -56,10 +57,12 @@ PanelWindow {
 
     }
 
+    // CENTER
     Clock {
         id: clock
 
         anchors.centerIn: parent
+        muted: notifMute.muted
     }
 
     Updates {
@@ -68,6 +71,27 @@ PanelWindow {
         anchors.rightMargin: 12
     }
 
+    // Row ignora os itens invisíveis, então não sobra vão quando
+    // o Tasks ou o NotificationMute estão escondidos
+    Row {
+        anchors.verticalCenter: clock.verticalCenter
+        anchors.left: clock.right
+        anchors.leftMargin: 12
+        spacing: 12
+
+        Tasks {
+            barHovered: barHover.hovered
+        }
+
+        NotificationMute {
+            id: notifMute
+
+            barHovered: barHover.hovered
+        }
+
+    }
+
+    // RIGHT
     RowLayout {
         anchors.right: parent.right
         anchors.rightMargin: 8
@@ -80,6 +104,16 @@ PanelWindow {
         }
 
         Network {
+        }
+
+    }
+
+    Item {
+        anchors.fill: parent
+        z: 1000
+
+        HoverHandler {
+            id: barHover
         }
 
     }

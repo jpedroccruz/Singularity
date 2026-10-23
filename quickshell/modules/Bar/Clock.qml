@@ -29,6 +29,7 @@ Rectangle {
     property int firstDay: 0
     // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
     // curvam para dentro da barra, como se o popup fosse parte dela.
+    property bool muted: false
     property int edge: 20
     property int viewYear: new Date().getFullYear()
     property int viewMonth: new Date().getMonth()
@@ -174,7 +175,9 @@ Rectangle {
         onNotification: (n) => {
             root.times[n.id] = Date.now();
             n.tracked = true;
-            popups.push(n);
+            if (!root.muted)
+                popups.push(n);
+
         }
     }
 
