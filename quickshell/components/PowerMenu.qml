@@ -24,7 +24,7 @@ Scope {
     // Troque os comandos conforme seu setup (hyprlock, uwsm stop, etc.)
     readonly property var actions: [
         { name: "Shutdown",  icon: "power_settings_new", key: Qt.Key_S, cmd: ["systemctl", "poweroff"] },
-        { name: "Lock",      icon: "lock",              key: Qt.Key_L, cmd: ["sh", "-c", "sleep 0.1 && hyprlock"] },
+        { name: "Lock",      icon: "lock",              key: Qt.Key_L, cmd: ["loginctl", "lock-session"] },
         { name: "Reboot",    icon: "restart_alt",       key: Qt.Key_R, cmd: ["systemctl", "reboot"] },
         { name: "Suspend",   icon: "pause_circle",      key: Qt.Key_U, cmd: ["systemctl", "suspend"] },
         { name: "Logout",    icon: "logout",            key: Qt.Key_E, cmd: ["hyprctl", "dispatch", "hl.dsp.exit()"] },
