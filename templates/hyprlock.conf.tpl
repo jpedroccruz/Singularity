@@ -12,8 +12,17 @@ general {
 
 animations {
     enabled = true
+
     bezier = smooth, 0.22, 1, 0.36, 1
-    animation = inputFieldColors, 1, 2, smooth
+    bezier = overshoot, 0.34, 1.56, 0.64, 1
+
+    animation = fadeIn, 1, 2, smooth
+    animation = fadeOut, 1, 2, smooth
+
+    animation = inputFieldColors, 1, 4, smooth
+    animation = inputFieldFade, 1, 4, smooth
+    animation = inputFieldWidth, 1, 5, overshoot
+    animation = inputFieldDots, 1, 3, overshoot
 }
 
 # BACKGROUND
