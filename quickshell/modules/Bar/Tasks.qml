@@ -1,7 +1,6 @@
 // Módulo Tasks
 // Lista de tarefas simples: adicionar e remover.
 // As tarefas ficam salvas em ~/.local/state/quickshell/tasks.json.
-//
 // Na barra é só um ícone, como o Updates:
 // - invisível por padrão
 // - aparece em cinza quando o mouse passa por cima da barra
@@ -17,9 +16,16 @@ import Quickshell.Io
 import qs.theme as ThemeModule
 
 Item {
-    id: root
-
     // ---------- tema ----------
+    // ---------- configuração ----------
+    // ---------- estado ----------
+    // ---------- funções ----------
+    // ---------- armazenamento ----------
+    // ---------- hover na barra inteira ----------
+    // ---------- indicador da barra ----------
+    // ---------- popup ----------
+
+    id: root
 
     property color iconColor: ThemeModule.Theme.accent
     property color mutedColor: ThemeModule.Theme.muted
@@ -28,9 +34,6 @@ Item {
     property color borderColor: ThemeModule.Theme.border
     property string iconFont: "Material Symbols Rounded"
     property int iconSize: 18
-
-    // ---------- configuração ----------
-
     // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
     // curvam para dentro da barra, como se o popup fosse parte dela.
     property int edge: 20
@@ -39,18 +42,13 @@ Item {
     property bool alwaysShow: false
     // true quando o mouse está sobre a barra. Por padrão o módulo detecta
     // sozinho; o Bar pode sobrescrever: `Tasks { barHovered: barHover.hovered }`.
-    property bool barHovered: autoHover.hovered
-
-    // ---------- estado ----------
-
+    property bool barHovered: false
     property var tasks: [] // lista de textos
     property double closedAt: 0
     readonly property bool active: tasks.length > 0
     readonly property bool shown: alwaysShow || barHovered || active || popup.visible
     readonly property string storageDir: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/quickshell"
     readonly property string storagePath: storageDir + "/tasks.json"
-
-    // ---------- funções ----------
 
     function save() {
         file.setText(JSON.stringify(root.tasks));
@@ -89,8 +87,6 @@ Item {
     implicitHeight: icon.implicitHeight
     Component.onCompleted: mkdirProcess.running = true
 
-    // ---------- armazenamento ----------
-
     Process {
         id: mkdirProcess
 
@@ -115,23 +111,6 @@ Item {
         onLoadFailed: root.tasks = []
     }
 
-    // ---------- hover na barra inteira ----------
-
-    // Um HoverHandler preso ao conteúdo da janela da barra, para saber
-    // se o mouse está em qualquer ponto dela (não só em cima do módulo).
-    Item {
-        parent: root.QsWindow.window ? root.QsWindow.window.contentItem : null
-        width: parent ? parent.width : 0
-        height: parent ? parent.height : 0
-
-        HoverHandler {
-            id: autoHover
-        }
-
-    }
-
-    // ---------- indicador da barra ----------
-
     Text {
         id: icon
 
@@ -152,8 +131,6 @@ Item {
         acceptedButtons: Qt.LeftButton
         onClicked: root.togglePopup()
     }
-
-    // ---------- popup ----------
 
     PopupWindow {
         id: popup
@@ -257,13 +234,16 @@ Item {
             implicitHeight: content.implicitHeight + 28
 
             ColumnLayout {
+                // TÍTULO
+                // NOVA TAREFA
+                // LISTA
+                // LISTA VAZIA
+
                 id: content
 
                 anchors.fill: parent
                 anchors.margins: 14
                 spacing: 12
-
-                // TÍTULO
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -289,8 +269,6 @@ Item {
                     }
 
                 }
-
-                // NOVA TAREFA
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -351,8 +329,6 @@ Item {
                     }
 
                 }
-
-                // LISTA
 
                 ListView {
                     id: list
@@ -425,8 +401,6 @@ Item {
                     }
 
                 }
-
-                // LISTA VAZIA
 
                 Text {
                     Layout.fillWidth: true

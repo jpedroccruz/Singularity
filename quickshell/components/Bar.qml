@@ -71,9 +71,9 @@ PanelWindow {
         anchors.rightMargin: 12
     }
 
-    // Row ignora os itens invisíveis, então não sobra vão quando
-    // o Tasks ou o NotificationMute estão escondidos
     Row {
+        id: rightOfClock
+
         anchors.verticalCenter: clock.verticalCenter
         anchors.left: clock.right
         anchors.leftMargin: 12
@@ -91,6 +91,12 @@ PanelWindow {
 
     }
 
+    // Detector compartilhado da barra.
+    // Fica abaixo dos módulos para não interferir na interação.
+    HoverHandler {
+        id: barHover
+    }
+
     // RIGHT
     RowLayout {
         anchors.right: parent.right
@@ -104,16 +110,6 @@ PanelWindow {
         }
 
         Network {
-        }
-
-    }
-
-    Item {
-        anchors.fill: parent
-        z: 1000
-
-        HoverHandler {
-            id: barHover
         }
 
     }
