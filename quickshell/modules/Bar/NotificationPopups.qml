@@ -1,6 +1,12 @@
 // Banners de notificação no topo, centralizados (estilo Ubuntu/GNOME).
 // Não é um servidor: quem recebe as notificações é o NotificationServer do
 // Clock, que chama push(n) a cada notificação nova.
+//
+// Até `maxVisible` banners ao mesmo tempo, empilhados de cima para baixo:
+// o mais antigo fica em cima e cada notificação nova entra embaixo das
+// outras. Quando chega uma além do limite, o mais antigo (o de cima) sai.
+// Cada banner fica `displayTime` segundos na tela (pausa com o mouse em cima)
+// e mostra um medidor discreto de tempo no rodapé.
 
 import QtQuick
 import QtQuick.Layouts
@@ -26,14 +32,21 @@ Scope {
     property int topMargin: 50 // distância do topo da tela (altura da barra + folga)
     property int cardWidth: 400
     property int maxVisible: 3 // banners ao mesmo tempo
-    property real defaultTimeout: 6 // segundos (críticas ficam até serem fechadas)
-    property var items: [] // notificações exibidas, a mais nova primeiro
+    property real displayTime: 5 // segundos que cada banner fica na tela
+    property bool criticalSticky: false // true: críticas ficam até serem fechadas
+    // Altura fixa da janela (evita redimensionar a janela a cada quadro da
+    // animação). Só a área dos banners recebe cliques (veja `mask`).
+    property int windowHeight: (maxVisible + 1) * 180
+    property var items: [] // notificações exibidas, a mais antiga primeiro (em cima)
 
+    // A nova entra no fim da lista (embaixo). Quem passar do limite é o mais
+    // antigo: cada banner percebe isso sozinho (veja `overflow` no delegate)
+    // e sai com animação.
     function push(n) {
         if (items.indexOf(n) !== -1)
             return ;
 
-        items = [n].concat(items).slice(0, maxVisible);
+        items = items.concat([n]);
     }
 
     function remove(n) {
@@ -69,7 +82,10 @@ Scope {
         anchors.top: true
         margins.top: root.topMargin
         implicitWidth: root.cardWidth
-        implicitHeight: list.implicitHeight
+        implicitHeight: root.windowHeight
+        mask: Region {
+            item: list
+        }
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -92,8 +108,14 @@ Scope {
                     readonly property var extraActions: modelData.actions.filter((a) => {
                         return a.identifier !== "default" && a.text !== "";
                     })
+                    // true quando este banner está além do limite: os mais
+                    // antigos (primeiros da lista) são os que passam do limite
+                    readonly property bool overflow: root.items.indexOf(modelData) < root.items.length - root.maxVisible
+                    // críticas só ficam fixas se `criticalSticky` estiver ligado
+                    readonly property bool sticky: critical && root.criticalSticky
                     property bool shown: false
                     property bool leaving: false
+                    property real remaining: 1 // 1 = tempo cheio, 0 = acabou
 
                     function hide() {
                         if (leaving)
@@ -104,24 +126,48 @@ Scope {
                     }
 
                     width: list.width
-                    height: card.height
+                    // entra abrindo espaço e sai fechando: os outros banners
+                    // deslizam suavemente para ocupar o lugar
+                    height: (shown && !leaving) ? card.height : 0
+                    clip: true
                     Component.onCompleted: shown = true
+                    onOverflowChanged: {
+                        if (overflow)
+                            hide();
 
+                    }
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 260
+                            easing.type: Easing.OutCubic
+                        }
+
+                    }
+
+                    // espera a animação de saída terminar antes de remover
                     Timer {
                         id: leaveTimer
 
-                        interval: 230
+                        interval: 280
                         onTriggered: root.remove(wrap.modelData)
                     }
 
-                    // some sozinho depois do tempo (pausa com o mouse em cima)
-                    Timer {
-                        interval: {
-                            const t = wrap.modelData.expireTimeout;
-                            return (t > 0 ? Math.min(t, 30) : root.defaultTimeout) * 1000;
+                    // conta o tempo na tela: `remaining` vai de 1 até 0 em
+                    // `displayTime` segundos e pausa com o mouse em cima
+                    NumberAnimation {
+                        target: wrap
+                        property: "remaining"
+                        from: 1
+                        to: 0
+                        duration: root.displayTime * 1000
+                        running: wrap.shown && !wrap.leaving && !wrap.sticky
+                        paused: hover.hovered
+                        onStopped: {
+                            if (wrap.remaining <= 0.001)
+                                wrap.hide();
+
                         }
-                        running: wrap.shown && !wrap.leaving && !wrap.critical && !hover.hovered
-                        onTriggered: wrap.hide()
                     }
 
                     // a notificação foi fechada por fora (app ou botão Clear do relógio)
@@ -324,33 +370,56 @@ Scope {
 
                         }
 
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 200
+                        // medidor de tempo: linha fina no rodapé que encolhe
+                        Item {
+                            id: timeBar
+
+                            visible: !wrap.sticky
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
+                            anchors.bottomMargin: 7
+                            height: 2
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 1
+                                color: root.iconColor
+                                opacity: 0.15
+                            }
+
+                            Rectangle {
+                                width: parent.width * wrap.remaining
+                                height: parent.height
+                                radius: 1
+                                color: root.iconColor
+                                opacity: 0.6
                             }
 
                         }
 
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 200
+                                easing.type: Easing.OutCubic
+                            }
+
+                        }
+
+                        // desliza um pouco para baixo ao entrar e para cima ao sair
                         transform: Translate {
-                            y: (wrap.shown && !wrap.leaving) ? 0 : -28
+                            y: (wrap.shown && !wrap.leaving) ? 0 : -14
 
                             Behavior on y {
                                 NumberAnimation {
-                                    duration: 220
+                                    duration: 260
                                     easing.type: Easing.OutCubic
                                 }
 
                             }
 
-                        }
-
-                    }
-
-                    // os banners de baixo deslizam quando um de cima some
-                    Behavior on y {
-                        NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
                         }
 
                     }
