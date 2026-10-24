@@ -96,6 +96,14 @@ PanelWindow {
             barHovered: barHover.hovered
         }
 
+        IdleInhibitor {
+            barHovered: barHover.hovered
+        }
+
+        Pomodoro {
+            barHovered: barHover.hovered
+        }
+
     }
 
     // Detector compartilhado da barra.
