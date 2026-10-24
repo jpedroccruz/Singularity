@@ -63,6 +63,9 @@ PanelWindow {
 
         anchors.centerIn: parent
         muted: notifMute.muted
+        onSuppressed: (app, entry) => {
+            return notifMute.silence(app, entry);
+        }
     }
 
     Updates {

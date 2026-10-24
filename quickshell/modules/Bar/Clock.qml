@@ -7,14 +7,6 @@ import Quickshell.Services.Notifications
 import qs.theme as ThemeModule
 
 Rectangle {
-    // ---------- tema (mesmas cores do módulo de rede) ----------
-    // ---------- configuração ----------
-    // ---------- estado ----------
-    // ---------- helpers ----------
-    // ---------- fontes de dados ----------
-    // ---------- indicador da barra ----------
-    // ---------- popup ----------
-
     id: root
 
     property color iconColor: ThemeModule.Theme.accent
@@ -27,9 +19,10 @@ Rectangle {
     property string barFormat: "ddd MMM dd HH:mm"
     // Primeiro dia da semana no calendário: 0 = domingo, 1 = segunda
     property int firstDay: 0
+    // Não perturbe: true = notificações novas não viram banner (continuam na lista)
+    property bool muted: false
     // Raio dos cantos do popup: os de baixo são arredondados e os de cima se
     // curvam para dentro da barra, como se o popup fosse parte dela.
-    property bool muted: false
     property int edge: 20
     property int viewYear: new Date().getFullYear()
     property int viewMonth: new Date().getMonth()
@@ -60,6 +53,10 @@ Rectangle {
 
         return t;
     }
+
+    // Emitido quando uma notificação chega com o mudo ativo (não vira banner).
+    // O Bar liga isso ao NotificationMute para silenciar o som do app.
+    signal suppressed(string appName, string desktopEntry)
 
     function cap(s) {
         return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -177,7 +174,8 @@ Rectangle {
             n.tracked = true;
             if (!root.muted)
                 popups.push(n);
-
+            else
+                root.suppressed(n.appName, n.desktopEntry);
         }
     }
 
