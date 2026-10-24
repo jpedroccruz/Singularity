@@ -92,6 +92,10 @@ PanelWindow {
             barHovered: barHover.hovered
         }
 
+        NightLight {
+            barHovered: barHover.hovered
+        }
+
     }
 
     // Detector compartilhado da barra.
