@@ -114,7 +114,7 @@ Rectangle {
 
   function networkSymbol() {
     if (connected && linkType === "ethernet") return "lan"
-    if (!wifiEnabled || !connected) return "wifi_off"
+    if (!wifiEnabled || !connected) return "public_off"
     return signalSymbol(signalPct)
   }
 
