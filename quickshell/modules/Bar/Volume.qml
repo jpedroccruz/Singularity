@@ -32,6 +32,8 @@ Rectangle {
     property string activeInputPort: ""
     property real volume: sink ? sink.audio.volume : 0
     property bool muted: !sink || sink.audio.muted
+    // true quando o microfone está silenciado
+    property bool micMuted: !!source && source.audio.muted
     // Nível real do sinal captado pelo microfone.
     // PwNodePeakMonitor retorna valores entre 0.0 e 1.0.
     property real microphonePeak: inputPeakMonitor.peak
@@ -558,11 +560,31 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: 10
 
-                        Text {
-                            text: "volume_up"
-                            color: root.iconColor
-                            font.family: "Material Symbols Rounded"
-                            font.pixelSize: 22
+                        // clique: silencia / reativa a saída de áudio
+                        Rectangle {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            radius: 8
+                            color: outputMuteMouse.containsMouse ? root.selectorColor : "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.volumeSymbol()
+                                color: root.muted ? root.mutedColor : root.iconColor
+                                font.family: "Material Symbols Rounded"
+                                font.pixelSize: 22
+                            }
+
+                            MouseArea {
+                                id: outputMuteMouse
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: !!root.sink
+                                onClicked: root.sink.audio.muted = !root.sink.audio.muted
+                            }
+
                         }
 
                         Slider {
@@ -857,11 +879,31 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: 10
 
-                        Text {
-                            text: "mic"
-                            color: root.iconColor
-                            font.family: "Material Symbols Rounded"
-                            font.pixelSize: 22
+                        // clique: silencia / reativa o microfone
+                        Rectangle {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            radius: 8
+                            color: inputMuteMouse.containsMouse ? root.selectorColor : "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.micMuted ? "mic_off" : "mic"
+                                color: root.micMuted ? root.mutedColor : root.iconColor
+                                font.family: "Material Symbols Rounded"
+                                font.pixelSize: 22
+                            }
+
+                            MouseArea {
+                                id: inputMuteMouse
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: !!root.source
+                                onClicked: root.source.audio.muted = !root.source.audio.muted
+                            }
+
                         }
 
                         Slider {
