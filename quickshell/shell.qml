@@ -7,4 +7,5 @@ ShellRoot {
     Components.Launcher {}
     Components.PowerMenu {}
     Components.RadialMenu {}
+    Components.Osd {}
 }
