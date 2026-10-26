@@ -87,7 +87,7 @@ Rectangle {
             const escaped = trackTitle.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
             Hyprland.dispatch("hl.dsp.focus({ window = [==[title:.*" + escaped + ".*]==] })");
         }
-        popup.visible = false;
+        popup.open = false;
     }
 
     function formatTime(sec) {
@@ -154,7 +154,7 @@ Rectangle {
     // O MPRIS não avisa a posição sozinho: precisa pedir a atualização.
     Timer {
         interval: 250
-        running: popup.visible && root.playing
+        running: popup.open && root.playing
         repeat: true
         onTriggered: root.player.positionChanged()
     }
@@ -165,7 +165,7 @@ Rectangle {
         interval: 180
         onTriggered: {
             if (!mouseArea.containsMouse && !panelHover.hovered && !seekArea.pressed)
-                popup.visible = false;
+                popup.open = false;
 
         }
     }
@@ -220,11 +220,41 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         onEntered: closeTimer.stop()
         onExited: closeTimer.restart()
-        onClicked: popup.visible = !popup.visible
+        onClicked: popup.open = !popup.open
     }
 
     PanelWindow {
         id: popup
+
+        // `open` é o estado lógico (aberto/fechado); `reveal` vai de 0 a 1 durante a
+        // animação. A janela continua visível até a saída terminar.
+        property bool open: false
+        property real reveal: 0
+        // true: pula a animação (usado para reabrir a janela no mesmo lugar)
+        property bool instant: false
+        // o popup "brota" da barra: a largura abre primeiro, depois a altura
+        readonly property real wf: Math.min(1, reveal / 0.55)
+        readonly property real hf: Math.max(0, Math.min(1, (reveal - 0.1) / 0.9))
+
+        onOpenChanged: {
+            revealAnim.stop();
+            if (instant) {
+                reveal = open ? 1 : 0;
+                return ;
+            }
+            revealAnim.to = open ? 1 : 0;
+            // entra desacelerando; sai acelerando de volta para dentro da barra
+            revealAnim.duration = open ? 360 : 240;
+            revealAnim.easing.type = open ? Easing.OutQuint : Easing.InCubic;
+            revealAnim.start();
+        }
+
+        NumberAnimation {
+            id: revealAnim
+
+            target: popup
+            property: "reveal"
+        }
 
         screen: root.QsWindow.window.screen
         margins.top: root.QsWindow.window.height
@@ -233,7 +263,7 @@ Rectangle {
         WlrLayershell.namespace: "bar-popup"
         implicitWidth: 340 + root.edge
         implicitHeight: panel.implicitHeight + 4
-        visible: false
+        visible: open || reveal > 0.001
         color: "transparent"
 
         anchors {
@@ -241,398 +271,429 @@ Rectangle {
             left: true
         }
 
-        // curva que liga o popup à barra (espelhada: popup na esquerda)
-        Shape {
-            anchors.right: parent.right
+        // Tudo cresce a partir do canto da barra: a largura abre primeiro, depois
+        // a altura, e a curva do canto côncavo cresce junto, sempre colada na barra.
+        Item {
+            id: popupGrow
+
             anchors.top: parent.top
-            width: root.edge
-            height: root.edge
-            preferredRendererType: Shape.CurveRenderer
+            anchors.left: parent.left
+            width: root.edge + (popup.implicitWidth - root.edge) * popup.wf
+            height: popup.implicitHeight * popup.hf
+            opacity: Math.min(1, popup.reveal * 3)
 
-            ShapePath {
-                strokeWidth: 0
-                fillColor: root.panelColor
-                startX: 0
-                startY: 0
+            // curva que liga o popup à barra (cresce a partir do canto de cima)
+            Shape {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                width: root.edge
+                height: root.edge
+                preferredRendererType: Shape.CurveRenderer
+                transformOrigin: Item.TopLeft
+                scale: Math.min(1, popup.reveal / 0.5)
 
-                PathLine {
-                    x: 0
-                    y: root.edge
-                }
+                ShapePath {
+                    strokeWidth: 0
+                    fillColor: root.panelColor
+                    startX: 0
+                    startY: 0
 
-                PathArc {
-                    x: root.edge
-                    y: 0
-                    radiusX: root.edge
-                    radiusY: root.edge
-                    direction: PathArc.Clockwise
-                }
+                    PathLine {
+                        x: 0
+                        y: root.edge
+                    }
 
-                PathLine {
-                    x: 0
-                    y: 0
+                    PathArc {
+                        x: root.edge
+                        y: 0
+                        radiusX: root.edge
+                        radiusY: root.edge
+                        direction: PathArc.Clockwise
+                    }
+
+                    PathLine {
+                        x: 0
+                        y: 0
+                    }
                 }
 
             }
 
-        }
-
-        Rectangle {
-            id: panel
-
-            anchors.fill: parent
-            anchors.rightMargin: root.edge
-            color: root.panelColor
-            bottomRightRadius: root.edge
-            implicitHeight: content.implicitHeight + 24
-
-            HoverHandler {
-                id: panelHover
-
-                onHoveredChanged: {
-                    if (hovered)
-                        closeTimer.stop();
-                    else
-                        closeTimer.restart();
-                }
-            }
-
-            ColumnLayout {
-                // CAPA (esquerda) + NOME/ARTISTA (ao lado)
-                // BARRA DE PROGRESSO
-                // CONTROLES
-
-                id: content
+            // fundo do painel (acompanha o tamanho que está crescendo)
+            Rectangle {
+                id: popupBg
 
                 anchors.fill: parent
-                anchors.margins: 14
-                spacing: 14
+                anchors.rightMargin: root.edge
+                color: root.panelColor
+                bottomRightRadius: root.edge
+            }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 14
+            // conteúdo com o tamanho final, revelado pelo recorte
+            Item {
+                anchors.fill: popupBg
+                clip: true
 
-                    Item {
-                        Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: 104
-                        implicitHeight: 104
+                Rectangle {
+                    id: panel
 
-                        Rectangle {
-                            id: coverMask
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    width: popup.implicitWidth - root.edge
+                    height: popup.implicitHeight
+                    color: "transparent"
+                    implicitHeight: content.implicitHeight + 24
 
-                            anchors.fill: parent
-                            radius: 12
-                            visible: false
-                            layer.enabled: true
+                    HoverHandler {
+                        id: panelHover
+
+                        onHoveredChanged: {
+                            if (hovered)
+                                closeTimer.stop();
+                            else
+                                closeTimer.restart();
                         }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 12
-                            color: root.selectorColor
-                            border.width: 1
-                            border.color: root.borderColor
-                            visible: cover.status !== Image.Ready
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "music_note"
-                                color: root.mutedColor
-                                font.family: "Material Symbols Rounded"
-                                font.pixelSize: 40
-                            }
-
-                        }
-
-                        Image {
-                            id: cover
-
-                            anchors.fill: parent
-                            source: root.artUrl
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            cache: true
-                            visible: status === Image.Ready
-                            layer.enabled: true
-
-                            layer.effect: MultiEffect {
-                                maskEnabled: true
-                                maskSource: coverMask
-                            }
-
-                        }
-
-                        // hover: escurece a capa e mostra o ícone de "abrir"
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 12
-                            color: "#000000"
-                            opacity: coverMouse.containsMouse ? 0.45 : 0
-                            visible: root.hasPlayer
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "open_in_new"
-                                color: "#ffffff"
-                                opacity: coverMouse.containsMouse ? 1 : 0
-                                font.family: "Material Symbols Rounded"
-                                font.pixelSize: 34
-                            }
-
-                            Behavior on opacity {
-                                NumberAnimation {
-                                    duration: 120
-                                }
-
-                            }
-
-                        }
-
-                        MouseArea {
-                            id: coverMouse
-
-                            anchors.fill: parent
-                            enabled: root.hasPlayer
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.focusSource()
-                        }
-
                     }
 
                     ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        spacing: 3
+                        // CAPA (esquerda) + NOME/ARTISTA (ao lado)
+                        // BARRA DE PROGRESSO
+                        // CONTROLES
 
-                        Text {
+                        id: content
+
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        spacing: 14
+
+                        RowLayout {
                             Layout.fillWidth: true
-                            text: root.trackTitle
-                            color: root.iconColor
-                            font.family: "Rubik"
-                            font.pixelSize: 16
-                            font.bold: true
-                            wrapMode: Text.Wrap
-                            maximumLineCount: 2
-                            elide: Text.ElideRight
+                            spacing: 14
+
+                            Item {
+                                Layout.alignment: Qt.AlignVCenter
+                                implicitWidth: 104
+                                implicitHeight: 104
+
+                                Rectangle {
+                                    id: coverMask
+
+                                    anchors.fill: parent
+                                    radius: 12
+                                    visible: false
+                                    layer.enabled: true
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 12
+                                    color: root.selectorColor
+                                    border.width: 1
+                                    border.color: root.borderColor
+                                    visible: cover.status !== Image.Ready
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "music_note"
+                                        color: root.mutedColor
+                                        font.family: "Material Symbols Rounded"
+                                        font.pixelSize: 40
+                                    }
+
+                                }
+
+                                Image {
+                                    id: cover
+
+                                    anchors.fill: parent
+                                    source: root.artUrl
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    cache: true
+                                    visible: status === Image.Ready
+                                    layer.enabled: true
+
+                                    layer.effect: MultiEffect {
+                                        maskEnabled: true
+                                        maskSource: coverMask
+                                    }
+
+                                }
+
+                                // hover: escurece a capa e mostra o ícone de "abrir"
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 12
+                                    color: "#000000"
+                                    opacity: coverMouse.containsMouse ? 0.45 : 0
+                                    visible: root.hasPlayer
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "open_in_new"
+                                        color: "#ffffff"
+                                        opacity: coverMouse.containsMouse ? 1 : 0
+                                        font.family: "Material Symbols Rounded"
+                                        font.pixelSize: 34
+                                    }
+
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 120
+                                        }
+
+                                    }
+
+                                }
+
+                                MouseArea {
+                                    id: coverMouse
+
+                                    anchors.fill: parent
+                                    enabled: root.hasPlayer
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.focusSource()
+                                }
+
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                spacing: 3
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.trackTitle
+                                    color: root.iconColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: text !== ""
+                                    text: root.trackArtist
+                                    color: root.mutedColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 13
+                                    elide: Text.ElideRight
+                                }
+
+                            }
+
                         }
 
-                        Text {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            visible: text !== ""
-                            text: root.trackArtist
-                            color: root.mutedColor
-                            font.family: "Rubik"
-                            font.pixelSize: 13
-                            elide: Text.ElideRight
+                            spacing: 4
+
+                            Item {
+                                id: seekArea0
+
+                                property real dragValue: 0
+                                readonly property bool dragging: seekArea.pressed
+                                readonly property real shown: dragging ? dragValue : (root.length > 0 ? Math.max(0, Math.min(1, root.position / root.length)) : 0)
+
+                                Layout.fillWidth: true
+                                implicitHeight: 16
+
+                                Rectangle {
+                                    id: track
+
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width
+                                    height: 5
+                                    radius: height / 2
+                                    color: root.selectorColor
+                                    border.width: 1
+                                    border.color: root.borderColor
+
+                                    Rectangle {
+                                        width: parent.width * seekArea0.shown
+                                        height: parent.height
+                                        radius: parent.radius
+                                        color: root.iconColor
+                                    }
+
+                                }
+
+                                Rectangle {
+                                    visible: root.canSeek
+                                    width: seekArea.pressed ? 14 : 11
+                                    height: width
+                                    radius: width / 2
+                                    color: root.iconColor
+                                    anchors.verticalCenter: track.verticalCenter
+                                    x: Math.max(0, Math.min(track.width - width, track.width * seekArea0.shown - width / 2))
+
+                                    Behavior on width {
+                                        NumberAnimation {
+                                            duration: 90
+                                        }
+
+                                    }
+
+                                }
+
+                                MouseArea {
+                                    id: seekArea
+
+                                    function valueAt(x) {
+                                        return Math.max(0, Math.min(1, x / width));
+                                    }
+
+                                    anchors.fill: parent
+                                    enabled: root.canSeek
+                                    hoverEnabled: true
+                                    cursorShape: root.canSeek ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onPressed: (mouse) => {
+                                        return seekArea0.dragValue = valueAt(mouse.x);
+                                    }
+                                    onPositionChanged: (mouse) => {
+                                        if (pressed)
+                                            seekArea0.dragValue = valueAt(mouse.x);
+
+                                    }
+                                    onReleased: (mouse) => {
+                                        const v = valueAt(mouse.x);
+                                        seekArea0.dragValue = v;
+                                        if (root.hasPlayer && root.length > 0) {
+                                            root.player.position = v * root.length;
+                                            root.player.positionChanged();
+                                        }
+                                    }
+                                }
+
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Text {
+                                    text: root.formatTime(seekArea0.dragging ? seekArea0.dragValue * root.length : root.position)
+                                    color: root.mutedColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 12
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                Text {
+                                    text: root.formatTime(root.length)
+                                    color: root.mutedColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 12
+                                }
+
+                            }
+
                         }
 
-                    }
-
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
-
-                    Item {
-                        id: seekArea0
-
-                        property real dragValue: 0
-                        readonly property bool dragging: seekArea.pressed
-                        readonly property real shown: dragging ? dragValue : (root.length > 0 ? Math.max(0, Math.min(1, root.position / root.length)) : 0)
-
-                        Layout.fillWidth: true
-                        implicitHeight: 16
-
-                        Rectangle {
-                            id: track
-
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width
-                            height: 5
-                            radius: height / 2
-                            color: root.selectorColor
-                            border.width: 1
-                            border.color: root.borderColor
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: 18
 
                             Rectangle {
-                                width: parent.width * seekArea0.shown
-                                height: parent.height
-                                radius: parent.radius
+                                implicitWidth: 40
+                                implicitHeight: 40
+                                radius: 12
+                                color: prevMouse.containsMouse ? root.selectorColor : "transparent"
+                                opacity: root.hasPlayer && root.player.canGoPrevious ? 1 : 0.4
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "skip_previous"
+                                    color: root.iconColor
+                                    font.family: "Material Symbols Rounded"
+                                    font.pixelSize: 28
+                                }
+
+                                MouseArea {
+                                    id: prevMouse
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    enabled: root.hasPlayer && root.player.canGoPrevious
+                                    onClicked: root.player.previous()
+                                }
+
+                            }
+
+                            Rectangle {
+                                implicitWidth: 52
+                                implicitHeight: 52
+                                radius: 26
                                 color: root.iconColor
+                                opacity: root.hasPlayer && root.player.canTogglePlaying ? 1 : 0.4
+                                scale: playMouse.pressed ? 0.94 : 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: root.playing ? "pause" : "play_arrow"
+                                    color: root.panelColor
+                                    font.family: "Material Symbols Rounded"
+                                    font.pixelSize: 32
+                                }
+
+                                MouseArea {
+                                    id: playMouse
+
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    enabled: root.hasPlayer && root.player.canTogglePlaying
+                                    onClicked: root.player.togglePlaying()
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 90
+                                    }
+
+                                }
+
                             }
 
-                        }
+                            Rectangle {
+                                implicitWidth: 40
+                                implicitHeight: 40
+                                radius: 12
+                                color: nextMouse.containsMouse ? root.selectorColor : "transparent"
+                                opacity: root.hasPlayer && root.player.canGoNext ? 1 : 0.4
 
-                        Rectangle {
-                            visible: root.canSeek
-                            width: seekArea.pressed ? 14 : 11
-                            height: width
-                            radius: width / 2
-                            color: root.iconColor
-                            anchors.verticalCenter: track.verticalCenter
-                            x: Math.max(0, Math.min(track.width - width, track.width * seekArea0.shown - width / 2))
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "skip_next"
+                                    color: root.iconColor
+                                    font.family: "Material Symbols Rounded"
+                                    font.pixelSize: 28
+                                }
 
-                            Behavior on width {
-                                NumberAnimation {
-                                    duration: 90
+                                MouseArea {
+                                    id: nextMouse
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    enabled: root.hasPlayer && root.player.canGoNext
+                                    onClicked: root.player.next()
                                 }
 
                             }
 
                         }
 
-                        MouseArea {
-                            id: seekArea
-
-                            function valueAt(x) {
-                                return Math.max(0, Math.min(1, x / width));
-                            }
-
-                            anchors.fill: parent
-                            enabled: root.canSeek
-                            hoverEnabled: true
-                            cursorShape: root.canSeek ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onPressed: (mouse) => {
-                                return seekArea0.dragValue = valueAt(mouse.x);
-                            }
-                            onPositionChanged: (mouse) => {
-                                if (pressed)
-                                    seekArea0.dragValue = valueAt(mouse.x);
-
-                            }
-                            onReleased: (mouse) => {
-                                const v = valueAt(mouse.x);
-                                seekArea0.dragValue = v;
-                                if (root.hasPlayer && root.length > 0) {
-                                    root.player.position = v * root.length;
-                                    root.player.positionChanged();
-                                }
-                            }
-                        }
-
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-
-                        Text {
-                            text: root.formatTime(seekArea0.dragging ? seekArea0.dragValue * root.length : root.position)
-                            color: root.mutedColor
-                            font.family: "Rubik"
-                            font.pixelSize: 12
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                        }
-
-                        Text {
-                            text: root.formatTime(root.length)
-                            color: root.mutedColor
-                            font.family: "Rubik"
-                            font.pixelSize: 12
-                        }
-
                     }
 
                 }
-
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 18
-
-                    Rectangle {
-                        implicitWidth: 40
-                        implicitHeight: 40
-                        radius: 12
-                        color: prevMouse.containsMouse ? root.selectorColor : "transparent"
-                        opacity: root.hasPlayer && root.player.canGoPrevious ? 1 : 0.4
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "skip_previous"
-                            color: root.iconColor
-                            font.family: "Material Symbols Rounded"
-                            font.pixelSize: 28
-                        }
-
-                        MouseArea {
-                            id: prevMouse
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            enabled: root.hasPlayer && root.player.canGoPrevious
-                            onClicked: root.player.previous()
-                        }
-
-                    }
-
-                    Rectangle {
-                        implicitWidth: 52
-                        implicitHeight: 52
-                        radius: 26
-                        color: root.iconColor
-                        opacity: root.hasPlayer && root.player.canTogglePlaying ? 1 : 0.4
-                        scale: playMouse.pressed ? 0.94 : 1
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.playing ? "pause" : "play_arrow"
-                            color: root.panelColor
-                            font.family: "Material Symbols Rounded"
-                            font.pixelSize: 32
-                        }
-
-                        MouseArea {
-                            id: playMouse
-
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            enabled: root.hasPlayer && root.player.canTogglePlaying
-                            onClicked: root.player.togglePlaying()
-                        }
-
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 90
-                            }
-
-                        }
-
-                    }
-
-                    Rectangle {
-                        implicitWidth: 40
-                        implicitHeight: 40
-                        radius: 12
-                        color: nextMouse.containsMouse ? root.selectorColor : "transparent"
-                        opacity: root.hasPlayer && root.player.canGoNext ? 1 : 0.4
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "skip_next"
-                            color: root.iconColor
-                            font.family: "Material Symbols Rounded"
-                            font.pixelSize: 28
-                        }
-
-                        MouseArea {
-                            id: nextMouse
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            enabled: root.hasPlayer && root.player.canGoNext
-                            onClicked: root.player.next()
-                        }
-
-                    }
-
-                }
-
             }
 
         }

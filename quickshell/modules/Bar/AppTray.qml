@@ -75,13 +75,43 @@ Rectangle {
                 popup.showingMenu = false;
                 trayHover.wasHovered = false;
                 trayCloseTimer.stop();
-                popup.visible = !popup.visible;
+                popup.open = !popup.open;
             }
         }
     }
 
     PanelWindow {
         id: popup
+
+        // `open` é o estado lógico (aberto/fechado); `reveal` vai de 0 a 1 durante a
+        // animação. A janela continua visível até a saída terminar.
+        property bool open: false
+        property real reveal: 0
+        // true: pula a animação (usado para reabrir a janela no mesmo lugar)
+        property bool instant: false
+        // o popup "brota" da barra: a largura abre primeiro, depois a altura
+        readonly property real wf: Math.min(1, reveal / 0.55)
+        readonly property real hf: Math.max(0, Math.min(1, (reveal - 0.1) / 0.9))
+
+        onOpenChanged: {
+            revealAnim.stop();
+            if (instant) {
+                reveal = open ? 1 : 0;
+                return ;
+            }
+            revealAnim.to = open ? 1 : 0;
+            // entra desacelerando; sai acelerando de volta para dentro da barra
+            revealAnim.duration = open ? 360 : 240;
+            revealAnim.easing.type = open ? Easing.OutQuint : Easing.InCubic;
+            revealAnim.start();
+        }
+
+        NumberAnimation {
+            id: revealAnim
+
+            target: popup
+            property: "reveal"
+        }
 
         property bool showingMenu: false
 
@@ -93,7 +123,7 @@ Rectangle {
         WlrLayershell.namespace: "bar-popup"
         implicitWidth: root.edge + (showingMenu ? Math.max(220, menuColumn.implicitWidth + 20) : Math.max(180, trayLayout.implicitWidth + 20))
         implicitHeight: showingMenu ? Math.max(48, trayLayout.implicitHeight + menuColumn.implicitHeight + 30) : Math.max(48, trayLayout.implicitHeight + 20)
-        visible: false
+        visible: open || reveal > 0.001
         color: "transparent"
         onVisibleChanged: {
             if (!visible)
@@ -106,211 +136,244 @@ Rectangle {
             right: true
         }
 
-        Shape {
-            anchors.left: parent.left
+        // Tudo cresce a partir do canto da barra: a largura abre primeiro, depois
+        // a altura, e a curva do canto côncavo cresce junto, sempre colada na barra.
+        Item {
+            id: popupGrow
+
             anchors.top: parent.top
-            width: root.edge
-            height: root.edge
-            preferredRendererType: Shape.CurveRenderer
+            anchors.right: parent.right
+            width: root.edge + (popup.implicitWidth - root.edge) * popup.wf
+            height: popup.implicitHeight * popup.hf
+            opacity: Math.min(1, popup.reveal * 3)
 
-            ShapePath {
-                strokeWidth: 0
-                fillColor: root.panelColor
-                startX: root.edge
-                startY: 0
-
-                PathLine {
-                    x: root.edge
-                    y: root.edge
-                }
-
-                PathArc {
-                    x: 0
-                    y: 0
-                    radiusX: root.edge
-                    radiusY: root.edge
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: root.edge
-                    y: 0
-                }
-
-            }
-
-        }
-
-        Rectangle {
-            id: panel
-
-            anchors.fill: parent
-            anchors.leftMargin: root.edge
-            color: root.panelColor
-            bottomLeftRadius: root.edge
-
-            HoverHandler {
-                id: trayHover
-
-                property bool wasHovered: false
-
-                onHoveredChanged: {
-                    if (hovered) {
-                        wasHovered = true;
-                        trayCloseTimer.stop();
-                    } else if (wasHovered) {
-                        trayCloseTimer.restart();
-                    }
-                }
-            }
-
-            Timer {
-                id: trayCloseTimer
-
-                interval: 250
-                onTriggered: {
-                    if (!trayHover.hovered)
-                        popup.visible = false;
-
-                }
-            }
-
-            RowLayout {
-                id: trayLayout
-
-                anchors.top: parent.top
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.topMargin: 10
-                spacing: 12
-
-                Repeater {
-                    model: SystemTray.items
-
-                    delegate: MouseArea {
-                        required property var modelData
-
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        onPressed: function(event) {
-                            if (event.button === Qt.LeftButton) {
-                                event.accepted = true;
-                                root.activateItem(modelData);
-                                popup.visible = false;
-                                return ;
-                            }
-                            if (event.button === Qt.RightButton) {
-                                event.accepted = true;
-                                root.contextItem = modelData;
-                                trayCloseTimer.stop();
-                                trayHover.wasHovered = false;
-                                popup.showingMenu = modelData.hasMenu;
-                            }
-                        }
-
-                        Image {
-                            anchors.centerIn: parent
-                            source: parent.modelData.icon
-                            sourceSize.width: 22
-                            sourceSize.height: 22
-                            width: 22
-                            height: 22
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                        }
-
-                    }
-
-                }
-
-            }
-
-            ColumnLayout {
-                id: menuColumn
-
+            // curva que liga o popup à barra (cresce a partir do canto de cima)
+            Shape {
                 anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: trayLayout.bottom
-                anchors.topMargin: 8
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                spacing: 2
-                visible: popup.showingMenu
+                anchors.top: parent.top
+                width: root.edge
+                height: root.edge
+                preferredRendererType: Shape.CurveRenderer
+                transformOrigin: Item.TopRight
+                scale: Math.min(1, popup.reveal / 0.5)
 
-                HoverHandler {
-                    id: menuHover
+                ShapePath {
+                    strokeWidth: 0
+                    fillColor: root.panelColor
+                    startX: root.edge
+                    startY: 0
 
-                    property bool wasHovered: false
+                    PathLine {
+                        x: root.edge
+                        y: root.edge
+                    }
 
-                    onHoveredChanged: {
-                        if (hovered) {
-                            wasHovered = true;
-                            menuCloseTimer.stop();
-                        } else if (wasHovered) {
-                            menuCloseTimer.restart();
-                        }
+                    PathArc {
+                        x: 0
+                        y: 0
+                        radiusX: root.edge
+                        radiusY: root.edge
+                        direction: PathArc.Counterclockwise
+                    }
+
+                    PathLine {
+                        x: root.edge
+                        y: 0
                     }
                 }
 
-                Timer {
-                    id: menuCloseTimer
+            }
 
-                    interval: 180
-                    onTriggered: {
-                        if (!menuHover.hovered) {
-                            popup.visible = false;
-                            menuHover.wasHovered = false;
+            // fundo do painel (acompanha o tamanho que está crescendo)
+            Rectangle {
+                id: popupBg
+
+                anchors.fill: parent
+                anchors.leftMargin: root.edge
+                color: root.panelColor
+                bottomLeftRadius: root.edge
+            }
+
+            // conteúdo com o tamanho final, revelado pelo recorte
+            Item {
+                anchors.fill: popupBg
+                clip: true
+
+                Rectangle {
+                    id: panel
+
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    width: popup.implicitWidth - root.edge
+                    height: popup.implicitHeight
+                    color: "transparent"
+
+                    HoverHandler {
+                        id: trayHover
+
+                        property bool wasHovered: false
+
+                        onHoveredChanged: {
+                            if (hovered) {
+                                wasHovered = true;
+                                trayCloseTimer.stop();
+                            } else if (wasHovered) {
+                                trayCloseTimer.restart();
+                            }
                         }
                     }
-                }
 
-                Repeater {
-                    model: menuOpener.children
+                    Timer {
+                        id: trayCloseTimer
 
-                    delegate: Rectangle {
-                        required property var modelData
+                        interval: 250
+                        onTriggered: {
+                            if (!trayHover.hovered)
+                                popup.open = false;
 
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: modelData.isSeparator ? 1 : 30
-                        color: modelData.isSeparator ? root.iconColor : menuMouseArea.containsMouse ? ThemeModule.Theme.selector : "transparent"
+                        }
+                    }
 
-                        MouseArea {
-                            id: menuMouseArea
+                    RowLayout {
+                        id: trayLayout
 
-                            anchors.fill: parent
-                            hoverEnabled: !modelData.isSeparator
-                            enabled: !modelData.isSeparator && modelData.enabled
-                            onClicked: {
-                                modelData.triggered();
-                                popup.visible = false;
+                        anchors.top: parent.top
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.topMargin: 10
+                        spacing: 12
+
+                        Repeater {
+                            model: SystemTray.items
+
+                            delegate: MouseArea {
+                                required property var modelData
+
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 28
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onPressed: function(event) {
+                                    if (event.button === Qt.LeftButton) {
+                                        event.accepted = true;
+                                        root.activateItem(modelData);
+                                        popup.open = false;
+                                        return ;
+                                    }
+                                    if (event.button === Qt.RightButton) {
+                                        event.accepted = true;
+                                        root.contextItem = modelData;
+                                        trayCloseTimer.stop();
+                                        trayHover.wasHovered = false;
+                                        popup.showingMenu = modelData.hasMenu;
+                                    }
+                                }
+
+                                Image {
+                                    anchors.centerIn: parent
+                                    source: parent.modelData.icon
+                                    sourceSize.width: 22
+                                    sourceSize.height: 22
+                                    width: 22
+                                    height: 22
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                    ColumnLayout {
+                        id: menuColumn
+
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: trayLayout.bottom
+                        anchors.topMargin: 8
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        spacing: 2
+                        visible: popup.showingMenu
+
+                        HoverHandler {
+                            id: menuHover
+
+                            property bool wasHovered: false
+
+                            onHoveredChanged: {
+                                if (hovered) {
+                                    wasHovered = true;
+                                    menuCloseTimer.stop();
+                                } else if (wasHovered) {
+                                    menuCloseTimer.restart();
+                                }
                             }
                         }
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            visible: !modelData.isSeparator
+                        Timer {
+                            id: menuCloseTimer
 
-                            Image {
-                                Layout.preferredWidth: 18
-                                Layout.preferredHeight: 18
-                                source: modelData.icon
-                                sourceSize.width: 18
-                                sourceSize.height: 18
-                                visible: modelData.icon !== ""
-                                fillMode: Image.PreserveAspectFit
-                                smooth: true
+                            interval: 180
+                            onTriggered: {
+                                if (!menuHover.hovered) {
+                                    popup.open = false;
+                                    menuHover.wasHovered = false;
+                                }
                             }
+                        }
 
-                            Text {
+                        Repeater {
+                            model: menuOpener.children
+
+                            delegate: Rectangle {
+                                required property var modelData
+
                                 Layout.fillWidth: true
-                                text: modelData.text
-                                color: modelData.enabled ? root.iconColor : root.mutedColor
-                                font.family: "Rubik"
-                                font.pixelSize: 13
-                                elide: Text.ElideRight
+                                Layout.preferredHeight: modelData.isSeparator ? 1 : 30
+                                color: modelData.isSeparator ? root.iconColor : menuMouseArea.containsMouse ? ThemeModule.Theme.selector : "transparent"
+
+                                MouseArea {
+                                    id: menuMouseArea
+
+                                    anchors.fill: parent
+                                    hoverEnabled: !modelData.isSeparator
+                                    enabled: !modelData.isSeparator && modelData.enabled
+                                    onClicked: {
+                                        modelData.triggered();
+                                        popup.open = false;
+                                    }
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    visible: !modelData.isSeparator
+
+                                    Image {
+                                        Layout.preferredWidth: 18
+                                        Layout.preferredHeight: 18
+                                        source: modelData.icon
+                                        sourceSize.width: 18
+                                        sourceSize.height: 18
+                                        visible: modelData.icon !== ""
+                                        fillMode: Image.PreserveAspectFit
+                                        smooth: true
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.text
+                                        color: modelData.enabled ? root.iconColor : root.mutedColor
+                                        font.family: "Rubik"
+                                        font.pixelSize: 13
+                                        elide: Text.ElideRight
+                                    }
+
+                                }
+
                             }
 
                         }
@@ -318,7 +381,6 @@ Rectangle {
                     }
 
                 }
-
             }
 
         }

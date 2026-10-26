@@ -31,7 +31,7 @@ Item {
     property int cycles: 0 // pomodoros de foco concluídos
     property double closedAt: 0
     readonly property bool active: phase !== "idle"
-    readonly property bool shown: alwaysShow || barHovered || active || popup.visible
+    readonly property bool shown: alwaysShow || barHovered || active || popup.open
     readonly property string storageDir: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/quickshell"
     readonly property string storagePath: storageDir + "/pomodoro.json"
 
@@ -118,15 +118,15 @@ Item {
     }
 
     function togglePopup() {
-        if (popup.visible) {
-            popup.visible = false;
+        if (popup.open) {
+            popup.open = false;
             return ;
         }
         // o clique que acabou de fechar o popup não deve reabri-lo
         if (Date.now() - root.closedAt < 250)
             return ;
 
-        popup.visible = true;
+        popup.open = true;
     }
 
     visible: shown
@@ -214,6 +214,51 @@ Item {
     PopupWindow {
         id: popup
 
+        // `open` é o estado lógico (aberto/fechado); `reveal` vai de 0 a 1 durante a
+        // animação. A janela só é escondida depois que a saída termina.
+        property bool open: false
+        property real reveal: 0
+        // o popup "brota" da barra: a largura abre primeiro, depois a altura
+        readonly property real wf: Math.min(1, reveal / 0.55)
+        readonly property real hf: Math.max(0, Math.min(1, (reveal - 0.1) / 0.9))
+
+        onOpenChanged: {
+            revealAnim.stop();
+            if (open)
+                visible = true;
+
+            if (!open)
+                root.closedAt = Date.now();
+            // fechado de fora (clique fora do popup): a janela já sumiu, não anima
+            if (!open && !visible) {
+                reveal = 0;
+                return ;
+            }
+            revealAnim.to = open ? 1 : 0;
+            // entra desacelerando; sai acelerando de volta para dentro da barra
+            revealAnim.duration = open ? 360 : 240;
+            revealAnim.easing.type = open ? Easing.OutQuint : Easing.InCubic;
+            revealAnim.start();
+        }
+        // o compositor fechou o popup (clique fora): sincroniza o estado lógico
+        onVisibleChanged: {
+            if (!visible && open)
+                open = false;
+
+        }
+
+        NumberAnimation {
+            id: revealAnim
+
+            target: popup
+            property: "reveal"
+            onStopped: {
+                if (!popup.open && popup.reveal <= 0.001)
+                    popup.visible = false;
+
+            }
+        }
+
         // ancorado na janela da barra (não no módulo): fica no centro da tela
         anchor.window: root.QsWindow.window
         anchor.rect.x: root.QsWindow.window.width / 2 - implicitWidth / 2
@@ -223,295 +268,322 @@ Item {
         visible: false
         color: "transparent"
         grabFocus: true
-        onVisibleChanged: {
-            if (!visible)
-                root.closedAt = Date.now();
 
-        }
+        // Tudo cresce a partir do canto da barra: a largura abre primeiro, depois
+        // a altura, e a curva do canto côncavo cresce junto, sempre colada na barra.
+        Item {
+            id: popupGrow
 
-        // cantos côncavos que ligam o popup à barra
-        Shape {
-            anchors.left: parent.left
             anchors.top: parent.top
-            width: root.edge
-            height: root.edge
-            preferredRendererType: Shape.CurveRenderer
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: root.edge * 2 + (popup.implicitWidth - root.edge * 2) * popup.wf
+            height: popup.implicitHeight * popup.hf
+            opacity: Math.min(1, popup.reveal * 3)
 
-            ShapePath {
-                strokeWidth: 0
-                fillColor: root.panelColor
-                startX: root.edge
-                startY: 0
+            // curva que liga o popup à barra (cresce a partir do canto de cima)
+            Shape {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                width: root.edge
+                height: root.edge
+                preferredRendererType: Shape.CurveRenderer
+                transformOrigin: Item.TopRight
+                scale: Math.min(1, popup.reveal / 0.5)
 
-                PathLine {
-                    x: root.edge
-                    y: root.edge
-                }
+                ShapePath {
+                    strokeWidth: 0
+                    fillColor: root.panelColor
+                    startX: root.edge
+                    startY: 0
 
-                PathArc {
-                    x: 0
-                    y: 0
-                    radiusX: root.edge
-                    radiusY: root.edge
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: root.edge
-                    y: 0
-                }
-
-            }
-
-        }
-
-        Shape {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            width: root.edge
-            height: root.edge
-            preferredRendererType: Shape.CurveRenderer
-
-            ShapePath {
-                strokeWidth: 0
-                fillColor: root.panelColor
-                startX: 0
-                startY: 0
-
-                PathLine {
-                    x: 0
-                    y: root.edge
-                }
-
-                PathArc {
-                    x: root.edge
-                    y: 0
-                    radiusX: root.edge
-                    radiusY: root.edge
-                    direction: PathArc.Clockwise
-                }
-
-                PathLine {
-                    x: 0
-                    y: 0
-                }
-
-            }
-
-        }
-
-        Rectangle {
-            id: panel
-
-            anchors.fill: parent
-            anchors.leftMargin: root.edge
-            anchors.rightMargin: root.edge
-            color: root.panelColor
-            bottomLeftRadius: root.edge
-            bottomRightRadius: root.edge
-            implicitHeight: content.implicitHeight + 28
-
-            Item {
-                anchors.fill: parent
-                focus: true
-                Keys.onEscapePressed: popup.visible = false
-            }
-
-            ColumnLayout {
-                // TÍTULO + ESTADO
-                // TEMPOS (foco e descanso)
-                // RODAPÉ: ciclos concluídos + parar
-                // dica quando as configurações mudam durante uma sessão
-
-                id: content
-
-                anchors.fill: parent
-                anchors.margins: 14
-                spacing: 12
-
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    Text {
-                        text: "Pomodoro"
-                        color: root.iconColor
-                        font.family: "Rubik"
-                        font.pixelSize: 16
-                        font.bold: true
+                    PathLine {
+                        x: root.edge
+                        y: root.edge
                     }
+
+                    PathArc {
+                        x: 0
+                        y: 0
+                        radiusX: root.edge
+                        radiusY: root.edge
+                        direction: PathArc.Counterclockwise
+                    }
+
+                    PathLine {
+                        x: root.edge
+                        y: 0
+                    }
+                }
+
+            }
+
+            Shape {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                width: root.edge
+                height: root.edge
+                preferredRendererType: Shape.CurveRenderer
+                transformOrigin: Item.TopLeft
+                scale: Math.min(1, popup.reveal / 0.5)
+
+                ShapePath {
+                    strokeWidth: 0
+                    fillColor: root.panelColor
+                    startX: 0
+                    startY: 0
+
+                    PathLine {
+                        x: 0
+                        y: root.edge
+                    }
+
+                    PathArc {
+                        x: root.edge
+                        y: 0
+                        radiusX: root.edge
+                        radiusY: root.edge
+                        direction: PathArc.Clockwise
+                    }
+
+                    PathLine {
+                        x: 0
+                        y: 0
+                    }
+                }
+
+            }
+
+            // fundo do painel (acompanha o tamanho que está crescendo)
+            Rectangle {
+                id: popupBg
+
+                anchors.fill: parent
+                anchors.leftMargin: root.edge
+                anchors.rightMargin: root.edge
+                color: root.panelColor
+                bottomLeftRadius: root.edge
+                bottomRightRadius: root.edge
+            }
+
+            // conteúdo com o tamanho final, revelado pelo recorte
+            Item {
+                anchors.fill: popupBg
+                clip: true
+
+                Rectangle {
+                    id: panel
+
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: popup.implicitWidth - root.edge * 2
+                    height: popup.implicitHeight
+                    color: "transparent"
+                    implicitHeight: content.implicitHeight + 28
 
                     Item {
-                        Layout.fillWidth: true
+                        anchors.fill: parent
+                        focus: true
+                        Keys.onEscapePressed: popup.open = false
                     }
 
-                    Text {
-                        text: root.phase === "idle" ? "Parado" : ((root.phase === "focus" ? "Foco" : "Descanso") + " · " + root.formatTime(root.remainingMs) + (root.running ? "" : " (pausado)"))
-                        color: root.mutedColor
-                        font.family: "Rubik"
-                        font.pixelSize: 12
-                    }
+                    ColumnLayout {
+                        // TÍTULO + ESTADO
+                        // TEMPOS (foco e descanso)
+                        // RODAPÉ: ciclos concluídos + parar
+                        // dica quando as configurações mudam durante uma sessão
 
-                }
+                        id: content
 
-                Repeater {
-                    model: [{
-                        "label": "Foco",
-                        "key": "focus",
-                        "step": 5,
-                        "min": 5,
-                        "max": 90
-                    }, {
-                        "label": "Descanso",
-                        "key": "break",
-                        "step": 1,
-                        "min": 1,
-                        "max": 30
-                    }]
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        spacing: 12
 
-                    delegate: RowLayout {
-                        id: setting
-
-                        required property var modelData
-
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Text {
-                            text: setting.modelData.label
-                            color: root.iconColor
-                            font.family: "Rubik"
-                            font.pixelSize: 14
-                        }
-
-                        Item {
+                        RowLayout {
                             Layout.fillWidth: true
-                        }
-
-                        Rectangle {
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 8
-                            color: minusMouse.containsMouse ? root.borderColor : root.selectorColor
-                            border.width: 1
-                            border.color: root.borderColor
 
                             Text {
-                                anchors.centerIn: parent
-                                text: "remove"
+                                text: "Pomodoro"
                                 color: root.iconColor
-                                font.family: "Material Symbols Rounded"
-                                font.pixelSize: 18
+                                font.family: "Rubik"
+                                font.pixelSize: 16
+                                font.bold: true
                             }
 
-                            MouseArea {
-                                id: minusMouse
+                            Item {
+                                Layout.fillWidth: true
+                            }
 
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.change(setting.modelData.key, -setting.modelData.step, setting.modelData.min, setting.modelData.max)
+                            Text {
+                                text: root.phase === "idle" ? "Parado" : ((root.phase === "focus" ? "Foco" : "Descanso") + " · " + root.formatTime(root.remainingMs) + (root.running ? "" : " (pausado)"))
+                                color: root.mutedColor
+                                font.family: "Rubik"
+                                font.pixelSize: 12
+                            }
+
+                        }
+
+                        Repeater {
+                            model: [{
+                                "label": "Foco",
+                                "key": "focus",
+                                "step": 5,
+                                "min": 5,
+                                "max": 90
+                            }, {
+                                "label": "Descanso",
+                                "key": "break",
+                                "step": 1,
+                                "min": 1,
+                                "max": 30
+                            }]
+
+                            delegate: RowLayout {
+                                id: setting
+
+                                required property var modelData
+
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Text {
+                                    text: setting.modelData.label
+                                    color: root.iconColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 14
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                Rectangle {
+                                    implicitWidth: 30
+                                    implicitHeight: 30
+                                    radius: 8
+                                    color: minusMouse.containsMouse ? root.borderColor : root.selectorColor
+                                    border.width: 1
+                                    border.color: root.borderColor
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "remove"
+                                        color: root.iconColor
+                                        font.family: "Material Symbols Rounded"
+                                        font.pixelSize: 18
+                                    }
+
+                                    MouseArea {
+                                        id: minusMouse
+
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.change(setting.modelData.key, -setting.modelData.step, setting.modelData.min, setting.modelData.max)
+                                    }
+
+                                }
+
+                                Text {
+                                    Layout.preferredWidth: 60
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: root.valueOf(setting.modelData.key) + " min"
+                                    color: root.iconColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+
+                                Rectangle {
+                                    implicitWidth: 30
+                                    implicitHeight: 30
+                                    radius: 8
+                                    color: plusMouse.containsMouse ? root.borderColor : root.selectorColor
+                                    border.width: 1
+                                    border.color: root.borderColor
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "add"
+                                        color: root.iconColor
+                                        font.family: "Material Symbols Rounded"
+                                        font.pixelSize: 18
+                                    }
+
+                                    MouseArea {
+                                        id: plusMouse
+
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.change(setting.modelData.key, setting.modelData.step, setting.modelData.min, setting.modelData.max)
+                                    }
+
+                                }
+
+                            }
+
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+                            spacing: 8
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.cycles === 0 ? "" : root.cycles + (root.cycles === 1 ? " ciclo concluído" : " ciclos concluídos")
+                                color: root.mutedColor
+                                font.family: "Rubik"
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
+
+                            Rectangle {
+                                visible: root.active
+                                implicitWidth: 80
+                                implicitHeight: 30
+                                radius: 8
+                                color: stopMouse.containsMouse ? root.borderColor : root.selectorColor
+                                border.width: 1
+                                border.color: stopMouse.containsMouse ? root.iconColor : root.borderColor
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Parar"
+                                    color: root.iconColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 13
+                                }
+
+                                MouseArea {
+                                    id: stopMouse
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.stop();
+                                        popup.open = false;
+                                    }
+                                }
+
                             }
 
                         }
 
                         Text {
-                            Layout.preferredWidth: 60
-                            horizontalAlignment: Text.AlignHCenter
-                            text: root.valueOf(setting.modelData.key) + " min"
-                            color: root.iconColor
+                            Layout.fillWidth: true
+                            visible: root.active
+                            text: "Os novos tempos valem a partir da próxima fase."
+                            color: root.mutedColor
                             font.family: "Rubik"
-                            font.pixelSize: 14
-                            font.bold: true
-                        }
-
-                        Rectangle {
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 8
-                            color: plusMouse.containsMouse ? root.borderColor : root.selectorColor
-                            border.width: 1
-                            border.color: root.borderColor
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "add"
-                                color: root.iconColor
-                                font.family: "Material Symbols Rounded"
-                                font.pixelSize: 18
-                            }
-
-                            MouseArea {
-                                id: plusMouse
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.change(setting.modelData.key, setting.modelData.step, setting.modelData.min, setting.modelData.max)
-                            }
-
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
                         }
 
                     }
 
                 }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 2
-                    spacing: 8
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.cycles === 0 ? "" : root.cycles + (root.cycles === 1 ? " ciclo concluído" : " ciclos concluídos")
-                        color: root.mutedColor
-                        font.family: "Rubik"
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                    }
-
-                    Rectangle {
-                        visible: root.active
-                        implicitWidth: 80
-                        implicitHeight: 30
-                        radius: 8
-                        color: stopMouse.containsMouse ? root.borderColor : root.selectorColor
-                        border.width: 1
-                        border.color: stopMouse.containsMouse ? root.iconColor : root.borderColor
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Parar"
-                            color: root.iconColor
-                            font.family: "Rubik"
-                            font.pixelSize: 13
-                        }
-
-                        MouseArea {
-                            id: stopMouse
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.stop();
-                                popup.visible = false;
-                            }
-                        }
-
-                    }
-
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    visible: root.active
-                    text: "Os novos tempos valem a partir da próxima fase."
-                    color: root.mutedColor
-                    font.family: "Rubik"
-                    font.pixelSize: 11
-                    wrapMode: Text.WordWrap
-                }
-
             }
 
         }

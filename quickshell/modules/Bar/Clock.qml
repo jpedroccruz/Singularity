@@ -133,15 +133,15 @@ Rectangle {
     }
 
     function togglePopup() {
-        if (popup.visible) {
-            popup.visible = false;
+        if (popup.open) {
+            popup.open = false;
             return ;
         }
         // o clique que acabou de fechar o popup não deve reabri-lo
         if (Date.now() - root.closedAt < 250)
             return ;
 
-        popup.visible = true;
+        popup.open = true;
     }
 
     implicitWidth: barRow.implicitWidth + 18
@@ -181,7 +181,7 @@ Rectangle {
 
     Timer {
         interval: 30000
-        running: popup.visible
+        running: popup.open
         repeat: true
         onTriggered: root.tick++
     }
@@ -221,7 +221,7 @@ Rectangle {
         height: 2
         radius: height / 2
         color: root.iconColor
-        visible: mouseArea.containsMouse || popup.visible
+        visible: mouseArea.containsMouse || popup.open
     }
 
     MouseArea {
@@ -237,6 +237,55 @@ Rectangle {
     PopupWindow {
         id: popup
 
+        // `open` é o estado lógico (aberto/fechado); `reveal` vai de 0 a 1 durante a
+        // animação. A janela só é escondida depois que a saída termina.
+        property bool open: false
+        property real reveal: 0
+        // o popup "brota" da barra: a largura abre primeiro, depois a altura
+        readonly property real wf: Math.min(1, reveal / 0.55)
+        readonly property real hf: Math.max(0, Math.min(1, (reveal - 0.1) / 0.9))
+
+        onOpenChanged: {
+            revealAnim.stop();
+            if (open)
+                visible = true;
+
+            if (open) {
+                root.resetView();
+                root.tick++;
+            } else {
+                root.closedAt = Date.now();
+            }
+            // fechado de fora (clique fora do popup): a janela já sumiu, não anima
+            if (!open && !visible) {
+                reveal = 0;
+                return ;
+            }
+            revealAnim.to = open ? 1 : 0;
+            // entra desacelerando; sai acelerando de volta para dentro da barra
+            revealAnim.duration = open ? 360 : 240;
+            revealAnim.easing.type = open ? Easing.OutQuint : Easing.InCubic;
+            revealAnim.start();
+        }
+        // o compositor fechou o popup (clique fora): sincroniza o estado lógico
+        onVisibleChanged: {
+            if (!visible && open)
+                open = false;
+
+        }
+
+        NumberAnimation {
+            id: revealAnim
+
+            target: popup
+            property: "reveal"
+            onStopped: {
+                if (!popup.open && popup.reveal <= 0.001)
+                    popup.visible = false;
+
+            }
+        }
+
         anchor.item: root
         anchor.rect.x: root.width / 2 - implicitWidth / 2
         anchor.rect.y: root.height
@@ -245,312 +294,337 @@ Rectangle {
         visible: false
         color: "transparent"
         grabFocus: true
-        onVisibleChanged: {
-            if (visible) {
-                root.resetView();
-                root.tick++;
-            } else {
-                root.closedAt = Date.now();
-            }
-        }
 
-        // cantos côncavos que ligam o popup à barra
-        Shape {
-            anchors.left: parent.left
+        // Tudo cresce a partir do canto da barra: a largura abre primeiro, depois
+        // a altura, e a curva do canto côncavo cresce junto, sempre colada na barra.
+        Item {
+            id: popupGrow
+
             anchors.top: parent.top
-            width: root.edge
-            height: root.edge
-            preferredRendererType: Shape.CurveRenderer
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: root.edge * 2 + (popup.implicitWidth - root.edge * 2) * popup.wf
+            height: popup.implicitHeight * popup.hf
+            opacity: Math.min(1, popup.reveal * 3)
 
-            ShapePath {
-                strokeWidth: 0
-                fillColor: root.panelColor
-                startX: root.edge
-                startY: 0
+            // curva que liga o popup à barra (cresce a partir do canto de cima)
+            Shape {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                width: root.edge
+                height: root.edge
+                preferredRendererType: Shape.CurveRenderer
+                transformOrigin: Item.TopRight
+                scale: Math.min(1, popup.reveal / 0.5)
 
-                PathLine {
-                    x: root.edge
-                    y: root.edge
-                }
+                ShapePath {
+                    strokeWidth: 0
+                    fillColor: root.panelColor
+                    startX: root.edge
+                    startY: 0
 
-                PathArc {
-                    x: 0
-                    y: 0
-                    radiusX: root.edge
-                    radiusY: root.edge
-                    direction: PathArc.Counterclockwise
-                }
+                    PathLine {
+                        x: root.edge
+                        y: root.edge
+                    }
 
-                PathLine {
-                    x: root.edge
-                    y: 0
-                }
+                    PathArc {
+                        x: 0
+                        y: 0
+                        radiusX: root.edge
+                        radiusY: root.edge
+                        direction: PathArc.Counterclockwise
+                    }
 
-            }
-
-        }
-
-        Shape {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            width: root.edge
-            height: root.edge
-            preferredRendererType: Shape.CurveRenderer
-
-            ShapePath {
-                strokeWidth: 0
-                fillColor: root.panelColor
-                startX: 0
-                startY: 0
-
-                PathLine {
-                    x: 0
-                    y: root.edge
-                }
-
-                PathArc {
-                    x: root.edge
-                    y: 0
-                    radiusX: root.edge
-                    radiusY: root.edge
-                    direction: PathArc.Clockwise
-                }
-
-                PathLine {
-                    x: 0
-                    y: 0
+                    PathLine {
+                        x: root.edge
+                        y: 0
+                    }
                 }
 
             }
 
-        }
+            Shape {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                width: root.edge
+                height: root.edge
+                preferredRendererType: Shape.CurveRenderer
+                transformOrigin: Item.TopLeft
+                scale: Math.min(1, popup.reveal / 0.5)
 
-        Rectangle {
-            id: panel
+                ShapePath {
+                    strokeWidth: 0
+                    fillColor: root.panelColor
+                    startX: 0
+                    startY: 0
 
-            anchors.fill: parent
-            anchors.leftMargin: root.edge
-            anchors.rightMargin: root.edge
-            color: root.panelColor
-            bottomLeftRadius: root.edge
-            bottomRightRadius: root.edge
-            implicitHeight: content.implicitHeight + 28
+                    PathLine {
+                        x: 0
+                        y: root.edge
+                    }
 
+                    PathArc {
+                        x: root.edge
+                        y: 0
+                        radiusX: root.edge
+                        radiusY: root.edge
+                        direction: PathArc.Clockwise
+                    }
+
+                    PathLine {
+                        x: 0
+                        y: 0
+                    }
+                }
+
+            }
+
+            // fundo do painel (acompanha o tamanho que está crescendo)
+            Rectangle {
+                id: popupBg
+
+                anchors.fill: parent
+                anchors.leftMargin: root.edge
+                anchors.rightMargin: root.edge
+                color: root.panelColor
+                bottomLeftRadius: root.edge
+                bottomRightRadius: root.edge
+            }
+
+            // conteúdo com o tamanho final, revelado pelo recorte
             Item {
-                anchors.fill: parent
-                focus: true
-                Keys.onEscapePressed: popup.visible = false
-            }
+                anchors.fill: popupBg
+                clip: true
 
-            RowLayout {
-                // ===== NOTIFICAÇÕES =====
-                // ===== CALENDÁRIO =====
+                Rectangle {
+                    id: panel
 
-                id: content
-
-                anchors.fill: parent
-                anchors.margins: 14
-                spacing: 14
-
-                ColumnLayout {
-                    Layout.preferredWidth: 340
-                    Layout.fillHeight: true
-                    spacing: 12
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: popup.implicitWidth - root.edge * 2
+                    height: popup.implicitHeight
+                    color: "transparent"
+                    implicitHeight: content.implicitHeight + 28
 
                     Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        anchors.fill: parent
+                        focus: true
+                        Keys.onEscapePressed: popup.open = false
+                    }
 
-                        ListView {
-                            id: list
+                    RowLayout {
+                        // ===== NOTIFICAÇÕES =====
+                        // ===== CALENDÁRIO =====
 
-                            anchors.fill: parent
-                            clip: true
-                            spacing: 8
-                            boundsBehavior: Flickable.StopAtBounds
-                            model: root.notifList
+                        id: content
 
-                            ScrollIndicator.vertical: ScrollIndicator {
-                            }
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        spacing: 14
 
-                            delegate: Rectangle {
-                                id: card
+                        ColumnLayout {
+                            Layout.preferredWidth: 340
+                            Layout.fillHeight: true
+                            spacing: 12
 
-                                required property var modelData
-                                readonly property bool critical: modelData.urgency === NotificationUrgency.Critical
-                                readonly property var extraActions: modelData.actions.filter((a) => {
-                                    return a.identifier !== "default" && a.text !== "";
-                                })
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
 
-                                width: ListView.view.width
-                                height: cardRow.implicitHeight + 24
-                                radius: 6
-                                color: cardHover.hovered ? Qt.lighter(root.selectorColor, 1.1) : root.selectorColor
-                                border.width: 1
-                                border.color: critical ? root.iconColor : root.borderColor
+                                ListView {
+                                    id: list
 
-                                HoverHandler {
-                                    id: cardHover
-                                }
-
-                                // clicar no cartão executa a ação padrão (se existir)
-                                MouseArea {
                                     anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        const acts = card.modelData.actions;
-                                        for (let i = 0; i < acts.length; i++) {
-                                            if (acts[i].identifier === "default") {
-                                                acts[i].invoke();
-                                                card.modelData.dismiss();
-                                                popup.visible = false;
-                                                return ;
+                                    clip: true
+                                    spacing: 8
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    model: root.notifList
+
+                                    ScrollIndicator.vertical: ScrollIndicator {
+                                    }
+
+                                    delegate: Rectangle {
+                                        id: card
+
+                                        required property var modelData
+                                        readonly property bool critical: modelData.urgency === NotificationUrgency.Critical
+                                        readonly property var extraActions: modelData.actions.filter((a) => {
+                                            return a.identifier !== "default" && a.text !== "";
+                                        })
+
+                                        width: ListView.view.width
+                                        height: cardRow.implicitHeight + 24
+                                        radius: 6
+                                        color: cardHover.hovered ? Qt.lighter(root.selectorColor, 1.1) : root.selectorColor
+                                        border.width: 1
+                                        border.color: critical ? root.iconColor : root.borderColor
+
+                                        HoverHandler {
+                                            id: cardHover
+                                        }
+
+                                        // clicar no cartão executa a ação padrão (se existir)
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                const acts = card.modelData.actions;
+                                                for (let i = 0; i < acts.length; i++) {
+                                                    if (acts[i].identifier === "default") {
+                                                        acts[i].invoke();
+                                                        card.modelData.dismiss();
+                                                        popup.open = false;
+                                                        return ;
+                                                    }
+                                                }
                                             }
                                         }
-                                    }
-                                }
-
-                                RowLayout {
-                                    id: cardRow
-
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.top: parent.top
-                                    anchors.margins: 12
-                                    spacing: 10
-
-                                    // ícone
-                                    Rectangle {
-                                        Layout.alignment: Qt.AlignTop
-                                        Layout.preferredWidth: 36
-                                        Layout.preferredHeight: 36
-                                        radius: 6
-                                        color: root.menuColor
-                                        border.width: 1
-                                        border.color: root.borderColor
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            visible: iconImage.status !== Image.Ready
-                                            text: "notifications"
-                                            color: root.mutedColor
-                                            font.family: "Material Symbols Rounded"
-                                            font.pixelSize: 20
-                                        }
-
-                                        Image {
-                                            id: iconImage
-
-                                            anchors.centerIn: parent
-                                            width: 26
-                                            height: 26
-                                            source: root.iconSource(card.modelData)
-                                            sourceSize.width: 64
-                                            sourceSize.height: 64
-                                            fillMode: Image.PreserveAspectFit
-                                            asynchronous: true
-                                            smooth: true
-                                        }
-
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        Layout.alignment: Qt.AlignTop
-                                        spacing: 3
 
                                         RowLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 8
+                                            id: cardRow
 
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: card.modelData.summary
-                                                color: root.iconColor
-                                                font.family: "Rubik"
-                                                font.pixelSize: 13
-                                                font.bold: true
-                                                elide: Text.ElideRight
-                                            }
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 12
+                                            spacing: 10
 
-                                            Text {
-                                                text: root.ago(card.modelData, root.tick)
-                                                color: root.mutedColor
-                                                font.family: "Rubik"
-                                                font.pixelSize: 11
-                                            }
+                                            // ícone
+                                            Rectangle {
+                                                Layout.alignment: Qt.AlignTop
+                                                Layout.preferredWidth: 36
+                                                Layout.preferredHeight: 36
+                                                radius: 6
+                                                color: root.menuColor
+                                                border.width: 1
+                                                border.color: root.borderColor
 
-                                            // dispensar
-                                            Text {
-                                                text: "close"
-                                                color: closeMouse.containsMouse ? root.iconColor : root.mutedColor
-                                                font.family: "Material Symbols Rounded"
-                                                font.pixelSize: 16
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    visible: iconImage.status !== Image.Ready
+                                                    text: "notifications"
+                                                    color: root.mutedColor
+                                                    font.family: "Material Symbols Rounded"
+                                                    font.pixelSize: 20
+                                                }
 
-                                                MouseArea {
-                                                    id: closeMouse
+                                                Image {
+                                                    id: iconImage
 
-                                                    anchors.fill: parent
-                                                    anchors.margins: -4
-                                                    hoverEnabled: true
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: card.modelData.dismiss()
+                                                    anchors.centerIn: parent
+                                                    width: 26
+                                                    height: 26
+                                                    source: root.iconSource(card.modelData)
+                                                    sourceSize.width: 64
+                                                    sourceSize.height: 64
+                                                    fillMode: Image.PreserveAspectFit
+                                                    asynchronous: true
+                                                    smooth: true
                                                 }
 
                                             }
 
-                                        }
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                Layout.alignment: Qt.AlignTop
+                                                spacing: 3
 
-                                        Text {
-                                            visible: text !== ""
-                                            Layout.fillWidth: true
-                                            text: card.modelData.body
-                                            color: Qt.alpha(root.iconColor, 0.75)
-                                            font.family: "Rubik"
-                                            font.pixelSize: 12
-                                            wrapMode: Text.WordWrap
-                                            maximumLineCount: 3
-                                            elide: Text.ElideRight
-                                            textFormat: Text.PlainText
-                                        }
-
-                                        // ações extras
-                                        Flow {
-                                            Layout.fillWidth: true
-                                            Layout.topMargin: 4
-                                            visible: card.extraActions.length > 0
-                                            spacing: 6
-
-                                            Repeater {
-                                                model: card.extraActions
-
-                                                delegate: Rectangle {
-                                                    required property var modelData
-
-                                                    implicitWidth: actLabel.implicitWidth + 20
-                                                    implicitHeight: 26
-                                                    radius: 4
-                                                    color: actMouse.containsMouse ? root.borderColor : "transparent"
-                                                    border.width: 1
-                                                    border.color: root.borderColor
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 8
 
                                                     Text {
-                                                        id: actLabel
-
-                                                        anchors.centerIn: parent
-                                                        text: parent.modelData.text
+                                                        Layout.fillWidth: true
+                                                        text: card.modelData.summary
                                                         color: root.iconColor
                                                         font.family: "Rubik"
-                                                        font.pixelSize: 12
+                                                        font.pixelSize: 13
+                                                        font.bold: true
+                                                        elide: Text.ElideRight
                                                     }
 
-                                                    MouseArea {
-                                                        id: actMouse
+                                                    Text {
+                                                        text: root.ago(card.modelData, root.tick)
+                                                        color: root.mutedColor
+                                                        font.family: "Rubik"
+                                                        font.pixelSize: 11
+                                                    }
 
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: parent.modelData.invoke()
+                                                    // dispensar
+                                                    Text {
+                                                        text: "close"
+                                                        color: closeMouse.containsMouse ? root.iconColor : root.mutedColor
+                                                        font.family: "Material Symbols Rounded"
+                                                        font.pixelSize: 16
+
+                                                        MouseArea {
+                                                            id: closeMouse
+
+                                                            anchors.fill: parent
+                                                            anchors.margins: -4
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: card.modelData.dismiss()
+                                                        }
+
+                                                    }
+
+                                                }
+
+                                                Text {
+                                                    visible: text !== ""
+                                                    Layout.fillWidth: true
+                                                    text: card.modelData.body
+                                                    color: Qt.alpha(root.iconColor, 0.75)
+                                                    font.family: "Rubik"
+                                                    font.pixelSize: 12
+                                                    wrapMode: Text.WordWrap
+                                                    maximumLineCount: 3
+                                                    elide: Text.ElideRight
+                                                    textFormat: Text.PlainText
+                                                }
+
+                                                // ações extras
+                                                Flow {
+                                                    Layout.fillWidth: true
+                                                    Layout.topMargin: 4
+                                                    visible: card.extraActions.length > 0
+                                                    spacing: 6
+
+                                                    Repeater {
+                                                        model: card.extraActions
+
+                                                        delegate: Rectangle {
+                                                            required property var modelData
+
+                                                            implicitWidth: actLabel.implicitWidth + 20
+                                                            implicitHeight: 26
+                                                            radius: 4
+                                                            color: actMouse.containsMouse ? root.borderColor : "transparent"
+                                                            border.width: 1
+                                                            border.color: root.borderColor
+
+                                                            Text {
+                                                                id: actLabel
+
+                                                                anchors.centerIn: parent
+                                                                text: parent.modelData.text
+                                                                color: root.iconColor
+                                                                font.family: "Rubik"
+                                                                font.pixelSize: 12
+                                                            }
+
+                                                            MouseArea {
+                                                                id: actMouse
+
+                                                                anchors.fill: parent
+                                                                hoverEnabled: true
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: parent.modelData.invoke()
+                                                            }
+
+                                                        }
+
                                                     }
 
                                                 }
@@ -563,263 +637,263 @@ Rectangle {
 
                                 }
 
-                            }
-
-                        }
-
-                        // lista vazia
-                        ColumnLayout {
-                            visible: root.count === 0
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "notifications_off"
-                                color: root.mutedColor
-                                font.family: "Material Symbols Rounded"
-                                font.pixelSize: 36
-                            }
-
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "No notifications"
-                                color: root.mutedColor
-                                font.family: "Rubik"
-                                font.pixelSize: 13
-                            }
-
-                        }
-
-                    }
-
-                    // rodapé
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: root.count === 0 ? "" : root.count + (root.count === 1 ? " notification" : " notifications")
-                            color: root.mutedColor
-                            font.family: "Rubik"
-                            font.pixelSize: 12
-                            elide: Text.ElideRight
-                        }
-
-                        Rectangle {
-                            implicitWidth: 88
-                            implicitHeight: 34
-                            radius: 4
-                            opacity: root.count > 0 ? 1 : 0.5
-                            color: clearMouse.containsMouse && root.count > 0 ? root.borderColor : root.selectorColor
-                            border.width: 1
-                            border.color: clearMouse.containsMouse && root.count > 0 ? root.iconColor : root.borderColor
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "Clear"
-                                color: root.iconColor
-                                font.family: "Rubik"
-                                font.pixelSize: 13
-                            }
-
-                            MouseArea {
-                                id: clearMouse
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                enabled: root.count > 0
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.clearAll()
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                // divisória
-                Rectangle {
-                    Layout.fillHeight: true
-                    implicitWidth: 1
-                    color: root.borderColor
-                }
-
-                ColumnLayout {
-                    Layout.preferredWidth: 300
-                    Layout.alignment: Qt.AlignTop
-                    spacing: 14
-
-                    ColumnLayout {
-                        spacing: 0
-
-                        Text {
-                            text: root.cap(Qt.formatDate(clock.date, "dddd"))
-                            color: root.mutedColor
-                            font.family: "Rubik"
-                            font.pixelSize: 14
-                        }
-
-                        Text {
-                            text: root.longDate(clock.date)
-                            color: root.iconColor
-                            font.family: "Rubik"
-                            font.pixelSize: 20
-                            font.bold: true
-                        }
-
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: calCol.implicitHeight + 24
-                        radius: 8
-                        color: root.selectorColor
-                        border.width: 1
-                        border.color: root.borderColor
-
-                        ColumnLayout {
-                            id: calCol
-
-                            anchors.fill: parent
-                            anchors.margins: 12
-                            spacing: 8
-
-                            // navegação do mês
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-
-                                Rectangle {
-                                    implicitWidth: 28
-                                    implicitHeight: 28
-                                    radius: 4
-                                    color: prevMouse.containsMouse ? root.menuColor : "transparent"
+                                // lista vazia
+                                ColumnLayout {
+                                    visible: root.count === 0
+                                    anchors.centerIn: parent
+                                    spacing: 6
 
                                     Text {
-                                        anchors.centerIn: parent
-                                        text: "chevron_left"
-                                        color: root.iconColor
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: "notifications_off"
+                                        color: root.mutedColor
                                         font.family: "Material Symbols Rounded"
-                                        font.pixelSize: 20
+                                        font.pixelSize: 36
                                     }
-
-                                    MouseArea {
-                                        id: prevMouse
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.shiftMonth(-1)
-                                    }
-
-                                }
-
-                                // clicar no título volta para o mês atual
-                                Text {
-                                    Layout.fillWidth: true
-                                    horizontalAlignment: Text.AlignHCenter
-                                    text: root.monthTitle
-                                    color: root.iconColor
-                                    font.family: "Rubik"
-                                    font.pixelSize: 14
-                                    font.bold: true
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.resetView()
-                                    }
-
-                                }
-
-                                Rectangle {
-                                    implicitWidth: 28
-                                    implicitHeight: 28
-                                    radius: 4
-                                    color: nextMouse.containsMouse ? root.menuColor : "transparent"
 
                                     Text {
-                                        anchors.centerIn: parent
-                                        text: "chevron_right"
-                                        color: root.iconColor
-                                        font.family: "Material Symbols Rounded"
-                                        font.pixelSize: 20
-                                    }
-
-                                    MouseArea {
-                                        id: nextMouse
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.shiftMonth(1)
-                                    }
-
-                                }
-
-                            }
-
-                            // dias da semana + dias do mês
-                            GridLayout {
-                                Layout.fillWidth: true
-                                columns: 7
-                                rowSpacing: 2
-                                columnSpacing: 0
-                                uniformCellWidths: true
-
-                                Repeater {
-                                    model: root.weekdayLabels
-
-                                    delegate: Text {
-                                        required property string modelData
-
-                                        Layout.fillWidth: true
-                                        Layout.bottomMargin: 4
-                                        horizontalAlignment: Text.AlignHCenter
-                                        text: modelData
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: "No notifications"
                                         color: root.mutedColor
                                         font.family: "Rubik"
-                                        font.pixelSize: 11
-                                        font.bold: true
+                                        font.pixelSize: 13
                                     }
 
                                 }
 
-                                Repeater {
-                                    model: root.days
+                            }
 
-                                    delegate: Item {
-                                        required property var modelData
+                            // rodapé
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
 
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.count === 0 ? "" : root.count + (root.count === 1 ? " notification" : " notifications")
+                                    color: root.mutedColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+
+                                Rectangle {
+                                    implicitWidth: 88
+                                    implicitHeight: 34
+                                    radius: 4
+                                    opacity: root.count > 0 ? 1 : 0.5
+                                    color: clearMouse.containsMouse && root.count > 0 ? root.borderColor : root.selectorColor
+                                    border.width: 1
+                                    border.color: clearMouse.containsMouse && root.count > 0 ? root.iconColor : root.borderColor
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "Clear"
+                                        color: root.iconColor
+                                        font.family: "Rubik"
+                                        font.pixelSize: 13
+                                    }
+
+                                    MouseArea {
+                                        id: clearMouse
+
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        enabled: root.count > 0
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.clearAll()
+                                    }
+
+                                }
+
+                            }
+
+                        }
+
+                        // divisória
+                        Rectangle {
+                            Layout.fillHeight: true
+                            implicitWidth: 1
+                            color: root.borderColor
+                        }
+
+                        ColumnLayout {
+                            Layout.preferredWidth: 300
+                            Layout.alignment: Qt.AlignTop
+                            spacing: 14
+
+                            ColumnLayout {
+                                spacing: 0
+
+                                Text {
+                                    text: root.cap(Qt.formatDate(clock.date, "dddd"))
+                                    color: root.mutedColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 14
+                                }
+
+                                Text {
+                                    text: root.longDate(clock.date)
+                                    color: root.iconColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 20
+                                    font.bold: true
+                                }
+
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: calCol.implicitHeight + 24
+                                radius: 8
+                                color: root.selectorColor
+                                border.width: 1
+                                border.color: root.borderColor
+
+                                ColumnLayout {
+                                    id: calCol
+
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 8
+
+                                    // navegação do mês
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 34
+                                        spacing: 0
 
                                         Rectangle {
-                                            anchors.centerIn: parent
-                                            width: 30
-                                            height: 30
-                                            radius: 15
-                                            color: parent.modelData.today ? root.iconColor : (dayMouse.containsMouse ? root.menuColor : "transparent")
+                                            implicitWidth: 28
+                                            implicitHeight: 28
+                                            radius: 4
+                                            color: prevMouse.containsMouse ? root.menuColor : "transparent"
 
                                             Text {
                                                 anchors.centerIn: parent
-                                                text: parent.parent.modelData.day
-                                                color: parent.parent.modelData.today ? root.panelColor : (parent.parent.modelData.inMonth ? root.iconColor : root.mutedColor)
-                                                font.family: "Rubik"
-                                                font.pixelSize: 13
-                                                font.bold: parent.parent.modelData.today
+                                                text: "chevron_left"
+                                                color: root.iconColor
+                                                font.family: "Material Symbols Rounded"
+                                                font.pixelSize: 20
+                                            }
+
+                                            MouseArea {
+                                                id: prevMouse
+
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.shiftMonth(-1)
                                             }
 
                                         }
 
-                                        MouseArea {
-                                            id: dayMouse
+                                        // clicar no título volta para o mês atual
+                                        Text {
+                                            Layout.fillWidth: true
+                                            horizontalAlignment: Text.AlignHCenter
+                                            text: root.monthTitle
+                                            color: root.iconColor
+                                            font.family: "Rubik"
+                                            font.pixelSize: 14
+                                            font.bold: true
 
-                                            anchors.fill: parent
-                                            hoverEnabled: true
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.resetView()
+                                            }
+
+                                        }
+
+                                        Rectangle {
+                                            implicitWidth: 28
+                                            implicitHeight: 28
+                                            radius: 4
+                                            color: nextMouse.containsMouse ? root.menuColor : "transparent"
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "chevron_right"
+                                                color: root.iconColor
+                                                font.family: "Material Symbols Rounded"
+                                                font.pixelSize: 20
+                                            }
+
+                                            MouseArea {
+                                                id: nextMouse
+
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.shiftMonth(1)
+                                            }
+
+                                        }
+
+                                    }
+
+                                    // dias da semana + dias do mês
+                                    GridLayout {
+                                        Layout.fillWidth: true
+                                        columns: 7
+                                        rowSpacing: 2
+                                        columnSpacing: 0
+                                        uniformCellWidths: true
+
+                                        Repeater {
+                                            model: root.weekdayLabels
+
+                                            delegate: Text {
+                                                required property string modelData
+
+                                                Layout.fillWidth: true
+                                                Layout.bottomMargin: 4
+                                                horizontalAlignment: Text.AlignHCenter
+                                                text: modelData
+                                                color: root.mutedColor
+                                                font.family: "Rubik"
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                            }
+
+                                        }
+
+                                        Repeater {
+                                            model: root.days
+
+                                            delegate: Item {
+                                                required property var modelData
+
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 34
+
+                                                Rectangle {
+                                                    anchors.centerIn: parent
+                                                    width: 30
+                                                    height: 30
+                                                    radius: 15
+                                                    color: parent.modelData.today ? root.iconColor : (dayMouse.containsMouse ? root.menuColor : "transparent")
+
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: parent.parent.modelData.day
+                                                        color: parent.parent.modelData.today ? root.panelColor : (parent.parent.modelData.inMonth ? root.iconColor : root.mutedColor)
+                                                        font.family: "Rubik"
+                                                        font.pixelSize: 13
+                                                        font.bold: parent.parent.modelData.today
+                                                    }
+
+                                                }
+
+                                                MouseArea {
+                                                    id: dayMouse
+
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                }
+
+                                            }
+
                                         }
 
                                     }
@@ -833,7 +907,6 @@ Rectangle {
                     }
 
                 }
-
             }
 
         }
