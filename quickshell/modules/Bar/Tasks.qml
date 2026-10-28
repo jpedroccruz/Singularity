@@ -1,5 +1,5 @@
 // Módulo Tasks
-// Lista de tarefas simples: adicionar e remover.
+// Lista de tarefas simples: adicionar, remover e reordenar.
 // As tarefas ficam salvas em ~/.local/state/quickshell/tasks.json.
 // Na barra é só um ícone, como o Updates:
 // - invisível por padrão
@@ -16,15 +16,6 @@ import Quickshell.Io
 import qs.theme as ThemeModule
 
 Item {
-    // ---------- tema ----------
-    // ---------- configuração ----------
-    // ---------- estado ----------
-    // ---------- funções ----------
-    // ---------- armazenamento ----------
-    // ---------- hover na barra inteira ----------
-    // ---------- indicador da barra ----------
-    // ---------- popup ----------
-
     id: root
 
     property color iconColor: ThemeModule.Theme.accent
@@ -66,6 +57,18 @@ Item {
     function removeTask(index) {
         const copy = root.tasks.slice();
         copy.splice(index, 1);
+        root.tasks = copy;
+        save();
+    }
+
+    // move a tarefa de `from` para `to` (usado pelos botões de subir/descer)
+    function moveTask(from, to) {
+        if (from === to || from < 0 || to < 0 || from >= root.tasks.length || to >= root.tasks.length)
+            return ;
+
+        const copy = root.tasks.slice();
+        const moved = copy.splice(from, 1)[0];
+        copy.splice(to, 0, moved);
         root.tasks = copy;
         save();
     }
@@ -411,6 +414,15 @@ Item {
                             model: root.tasks
                             boundsBehavior: Flickable.StopAtBounds
 
+                            // animação suave quando uma tarefa troca de lugar
+                            displaced: Transition {
+                                NumberAnimation {
+                                    properties: "y"
+                                    duration: 150
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
                             delegate: Rectangle {
                                 id: item
 
@@ -430,7 +442,7 @@ Item {
                                     anchors.fill: parent
                                     anchors.leftMargin: 12
                                     anchors.rightMargin: 6
-                                    spacing: 8
+                                    spacing: 4
 
                                     Text {
                                         Layout.fillWidth: true
@@ -441,6 +453,67 @@ Item {
                                         wrapMode: Text.Wrap
                                     }
 
+                                    // subir
+                                    Rectangle {
+                                        readonly property bool canMove: item.index > 0
+
+                                        implicitWidth: 26
+                                        implicitHeight: 28
+                                        radius: 8
+                                        color: upMouse.containsMouse && canMove ? root.panelColor : "transparent"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "keyboard_arrow_up"
+                                            color: parent.canMove && upMouse.containsMouse ? root.iconColor : root.mutedColor
+                                            opacity: parent.canMove ? 1 : 0.3
+                                            font.family: "Material Symbols Rounded"
+                                            font.pixelSize: 20
+                                        }
+
+                                        MouseArea {
+                                            id: upMouse
+
+                                            anchors.fill: parent
+                                            enabled: parent.canMove
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.moveTask(item.index, item.index - 1)
+                                        }
+
+                                    }
+
+                                    // descer
+                                    Rectangle {
+                                        readonly property bool canMove: item.index < root.tasks.length - 1
+
+                                        implicitWidth: 26
+                                        implicitHeight: 28
+                                        radius: 8
+                                        color: downMouse.containsMouse && canMove ? root.panelColor : "transparent"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "keyboard_arrow_down"
+                                            color: parent.canMove && downMouse.containsMouse ? root.iconColor : root.mutedColor
+                                            opacity: parent.canMove ? 1 : 0.3
+                                            font.family: "Material Symbols Rounded"
+                                            font.pixelSize: 20
+                                        }
+
+                                        MouseArea {
+                                            id: downMouse
+
+                                            anchors.fill: parent
+                                            enabled: parent.canMove
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.moveTask(item.index, item.index + 1)
+                                        }
+
+                                    }
+
+                                    // remover
                                     Rectangle {
                                         implicitWidth: 28
                                         implicitHeight: 28
