@@ -45,6 +45,46 @@ hl.bind(mainMod .. " + CTRL + D", hl.dsp.layout("togglesplit"))    -- dwindle on
 hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ action = "toggle" }))
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" }))
 
+-- Zoom keys
+local MAX_ZOOM = 3
+local MIN_ZOOM = 1
+local ZOOM_TOGGLE_FACTOR = 1.5
+
+local function zoom(offset)
+    local current = hl.get_config("cursor.zoom_factor")
+    if offset ~= nil then
+        current = current + offset
+    elseif current ~= MIN_ZOOM then
+        current = MIN_ZOOM
+    else
+        current = ZOOM_TOGGLE_FACTOR
+    end
+    current = math.max(MIN_ZOOM, math.min(MAX_ZOOM, current))
+    hl.config({ cursor = { zoom_factor = current } })
+end
+
+hl.bind("SUPER + Z", function()
+    zoom()
+    hl.dispatch(hl.dsp.submap("zoom"))
+end)
+
+hl.define_submap("zoom", function()
+    -- Keyboard
+    hl.bind("equal", function() zoom(0.25) end, { repeating = true })
+    hl.bind("minus", function() zoom(-0.25) end, { repeating = true })
+
+    -- Cursor
+    hl.bind("CTRL + SHIFT + mouse_up",   function() zoom(0.5) end)
+    hl.bind("CTRL + SHIFT + mouse_down", function() zoom(-0.5) end)
+
+    local function leave()
+        hl.config({ cursor = { zoom_factor = MIN_ZOOM } })
+        hl.dispatch(hl.dsp.submap("reset"))
+    end
+
+    hl.bind("escape", leave)
+end)
+
 -- Move focus with mainMod + arrow keys
 hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }))
 hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }))
