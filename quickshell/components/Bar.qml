@@ -132,6 +132,9 @@ PanelWindow {
         Network {
         }
 
+        Monitors {
+        }
+
     }
 
     PanelWindow {
