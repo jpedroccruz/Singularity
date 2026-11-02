@@ -1,7 +1,6 @@
 // Banners de notificação no topo, centralizados (estilo Ubuntu/GNOME).
 // Não é um servidor: quem recebe as notificações é o NotificationServer do
 // Clock, que chama push(n) a cada notificação nova.
-//
 // Até `maxVisible` banners ao mesmo tempo, empilhados de cima para baixo:
 // o mais antigo fica em cima e cada notificação nova entra embaixo das
 // outras. Quando chega uma além do limite, o mais antigo (o de cima) sai.
@@ -11,6 +10,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Services.Notifications
 import Quickshell.Wayland
 import qs.theme as ThemeModule
@@ -69,6 +69,52 @@ Scope {
         return Quickshell.iconPath(ic, true);
     }
 
+    // Foca a janela do app que enviou a notificação (se houver uma aberta)
+    Component.onCompleted: dbg("popups carregado")
+
+    function dbg(msg) {
+        Quickshell.execDetached(["sh", "-c", "echo \"$(date +%T) $1\" >> /tmp/qs-focus.log", "sh", msg]);
+    }
+
+    function focusApp(n) {
+        if (!n) {
+            root.dbg("[focusApp] notificação nula");
+            return ;
+        }
+        const entry = (n.desktopEntry || "").replace(/\.desktop$/, "").toLowerCase();
+        const keys = [entry, entry.split(".").pop(), (n.appName || "").toLowerCase()].filter((s) => {
+            return s.length >= 3;
+        });
+        root.dbg("[focusApp] appName='" + n.appName + "' desktopEntry='" + n.desktopEntry + "'");
+        if (keys.length === 0)
+            return ;
+
+        Hyprland.refreshToplevels();
+        const tops = Hyprland.toplevels.values;
+        const seen = [];
+        for (let i = 0; i < tops.length; i++) {
+            const o = tops[i].lastIpcObject || {
+            };
+            const cls = [o["class"], o["initialClass"]].map((s) => {
+                return (s || "").toLowerCase();
+            }).filter((s) => {
+                return s.length >= 3;
+            });
+            seen.push(cls.join("/"));
+            for (let a = 0; a < keys.length; a++) {
+                for (let b = 0; b < cls.length; b++) {
+                    if (cls[b].indexOf(keys[a]) >= 0 || keys[a].indexOf(cls[b]) >= 0) {
+                        const addr = "0x" + tops[i].address.replace(/^0x/, "");
+                        root.dbg("[focusApp] focando " + cls[b] + " (" + addr + ")");
+                        Hyprland.dispatch("hl.dsp.focus({ window = [==[address:" + addr + "]==] })");
+                        return ;
+                    }
+                }
+            }
+        }
+        root.dbg("[focusApp] nenhuma janela casou com [" + keys.join(", ") + "]. Janelas: " + seen.join(" | "));
+    }
+
     ScriptModel {
         id: bannerModel
 
@@ -83,9 +129,6 @@ Scope {
         margins.top: root.topMargin
         implicitWidth: root.cardWidth
         implicitHeight: root.windowHeight
-        mask: Region {
-            item: list
-        }
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -134,14 +177,6 @@ Scope {
                     onOverflowChanged: {
                         if (overflow)
                             hide();
-
-                    }
-
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: 260
-                            easing.type: Easing.OutCubic
-                        }
 
                     }
 
@@ -194,20 +229,21 @@ Scope {
                             id: hover
                         }
 
-                        // clicar executa a ação padrão (abre o app); sem ela, só some o banner
+                        // clicar executa a ação padrão (se houver), foca o app e dispensa
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
+                                root.dbg("clique no card");
+                                root.focusApp(wrap.modelData);  // foca antes de invocar: a notificação pode fechar depois
                                 const acts = wrap.modelData.actions;
                                 for (let i = 0; i < acts.length; i++) {
                                     if (acts[i].identifier === "default") {
                                         acts[i].invoke();
-                                        wrap.modelData.dismiss();
-                                        return ;
+                                        break;
                                     }
                                 }
-                                wrap.hide();
+                                wrap.modelData.dismiss();
                             }
                         }
 
@@ -424,10 +460,22 @@ Scope {
 
                     }
 
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 260
+                            easing.type: Easing.OutCubic
+                        }
+
+                    }
+
                 }
 
             }
 
+        }
+
+        mask: Region {
+            item: list
         }
 
     }

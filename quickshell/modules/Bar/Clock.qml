@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Services.Notifications
 import qs.theme as ThemeModule
 
@@ -125,6 +126,52 @@ Rectangle {
             return "file://" + ic;
 
         return Quickshell.iconPath(ic, true);
+    }
+
+    // Foca a janela do app que enviou a notificação (se houver uma aberta)
+    Component.onCompleted: dbg("clock carregado")
+
+    function dbg(msg) {
+        Quickshell.execDetached(["sh", "-c", "echo \"$(date +%T) $1\" >> /tmp/qs-focus.log", "sh", msg]);
+    }
+
+    function focusApp(n) {
+        if (!n) {
+            root.dbg("[focusApp] notificação nula");
+            return ;
+        }
+        const entry = (n.desktopEntry || "").replace(/\.desktop$/, "").toLowerCase();
+        const keys = [entry, entry.split(".").pop(), (n.appName || "").toLowerCase()].filter((s) => {
+            return s.length >= 3;
+        });
+        root.dbg("[focusApp] appName='" + n.appName + "' desktopEntry='" + n.desktopEntry + "'");
+        if (keys.length === 0)
+            return ;
+
+        Hyprland.refreshToplevels();
+        const tops = Hyprland.toplevels.values;
+        const seen = [];
+        for (let i = 0; i < tops.length; i++) {
+            const o = tops[i].lastIpcObject || {
+            };
+            const cls = [o["class"], o["initialClass"]].map((s) => {
+                return (s || "").toLowerCase();
+            }).filter((s) => {
+                return s.length >= 3;
+            });
+            seen.push(cls.join("/"));
+            for (let a = 0; a < keys.length; a++) {
+                for (let b = 0; b < cls.length; b++) {
+                    if (cls[b].indexOf(keys[a]) >= 0 || keys[a].indexOf(cls[b]) >= 0) {
+                        const addr = "0x" + tops[i].address.replace(/^0x/, "");
+                        root.dbg("[focusApp] focando " + cls[b] + " (" + addr + ")");
+                        Hyprland.dispatch("hl.dsp.focus({ window = [==[address:" + addr + "]==] })");
+                        return ;
+                    }
+                }
+            }
+        }
+        root.dbg("[focusApp] nenhuma janela casou com [" + keys.join(", ") + "]. Janelas: " + seen.join(" | "));
     }
 
     function clearAll() {
@@ -463,20 +510,22 @@ Rectangle {
                                             id: cardHover
                                         }
 
-                                        // clicar no cartão executa a ação padrão (se existir)
+                                        // clicar no cartão executa a ação padrão (se houver), foca o app e dispensa
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
+                                                root.dbg("clique no card");
+                                                root.focusApp(card.modelData);  // foca antes de invocar: a notificação pode fechar depois
                                                 const acts = card.modelData.actions;
                                                 for (let i = 0; i < acts.length; i++) {
                                                     if (acts[i].identifier === "default") {
                                                         acts[i].invoke();
-                                                        card.modelData.dismiss();
-                                                        popup.open = false;
-                                                        return ;
+                                                        break;
                                                     }
                                                 }
+                                                card.modelData.dismiss();
+                                                popup.open = false;
                                             }
                                         }
 
