@@ -34,9 +34,9 @@ hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("qs ipc call radial toggleThemes"))
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("qs ipc call radial toggleWallpapers"))
 
 -- screenshot
-hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m output -n --raw | satty --filename -"))
-hl.bind("SHIFT + Print", hl.dsp.exec_cmd("hyprshot -m region -n --raw | satty --filename -"))
-hl.bind("CTRL + Print", hl.dsp.exec_cmd("hyprshot -m window -n --raw | satty --filename -"))
+hl.bind("Print", hl.dsp.exec_cmd("~/Singularity/bin/screenshot output"))
+hl.bind("SHIFT + Print", hl.dsp.exec_cmd("~/Singularity/bin/screenshot region"))
+hl.bind("CTRL + Print", hl.dsp.exec_cmd("~/Singularity/bin/screenshot window"))
 
 -- window view
 hl.bind(mainMod .. " + D", hl.dsp.window.float({ action = "toggle" }))
