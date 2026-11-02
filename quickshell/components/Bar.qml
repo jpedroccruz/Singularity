@@ -1,13 +1,18 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import qs.modules.Bar
 import qs.theme as ThemeModule
 
 PanelWindow {
     id: bar
 
+    required property var targetScreen
+
+    screen: targetScreen
     implicitHeight: 30
     color: ThemeModule.Theme.darkBackground
 
@@ -125,6 +130,96 @@ PanelWindow {
         }
 
         Network {
+        }
+
+    }
+
+    PanelWindow {
+        id: corners
+
+        readonly property int cornerRadius: 18
+
+        screen: bar.targetScreen
+        color: "transparent"
+        implicitHeight: cornerRadius
+        exclusionMode: ExclusionMode.Ignore
+        margins.top: bar.implicitHeight
+        WlrLayershell.namespace: "bar-corners"
+
+        anchors {
+            top: true
+            left: true
+            right: true
+        }
+
+        Shape {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            width: corners.cornerRadius
+            height: corners.cornerRadius
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                fillColor: ThemeModule.Theme.darkBackground
+                strokeWidth: 0
+                startX: 0
+                startY: 0
+
+                PathLine {
+                    x: corners.cornerRadius
+                    y: 0
+                }
+
+                PathArc {
+                    x: 0
+                    y: corners.cornerRadius
+                    radiusX: corners.cornerRadius
+                    radiusY: corners.cornerRadius
+                    direction: PathArc.Counterclockwise
+                }
+
+                PathLine {
+                    x: 0
+                    y: 0
+                }
+
+            }
+
+        }
+
+        Shape {
+            anchors.top: parent.top
+            anchors.right: parent.right
+            width: corners.cornerRadius
+            height: corners.cornerRadius
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                fillColor: ThemeModule.Theme.darkBackground
+                strokeWidth: 0
+                startX: corners.cornerRadius
+                startY: 0
+
+                PathLine {
+                    x: 0
+                    y: 0
+                }
+
+                PathArc {
+                    x: corners.cornerRadius
+                    y: corners.cornerRadius
+                    radiusX: corners.cornerRadius
+                    radiusY: corners.cornerRadius
+                    direction: PathArc.Clockwise
+                }
+
+                PathLine {
+                    x: corners.cornerRadius
+                    y: 0
+                }
+
+            }
+
         }
 
     }
