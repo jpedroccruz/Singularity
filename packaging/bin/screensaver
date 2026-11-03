@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+SCREENSAVER="$STATE_HOME/singularity/current/screensaver.py"
+
+if [[ ! -f "$SCREENSAVER" ]]; then
+    echo "Error: Singularity screensaver not found." >&2
+    echo "Run 'singularity theme set <name>' to generate it." >&2
+    exit 1
+fi
+
+exec python3 "$SCREENSAVER" "$@"
