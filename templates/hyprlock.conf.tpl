@@ -92,7 +92,7 @@ label {
 # CURRENT SONG
 label {
     monitor =
-    text = cmd[update:180] ~/Singularity/bin/hyprlock-song
+    text = cmd[update:180] hyprlock-song
 
     color = rgb({{ accent }})
     font_size = 16
@@ -114,12 +114,12 @@ label {
     halign = center
     valign = center
 
-    onclick = ~/Singularity/bin/hyprlock-media previous
+    onclick = hyprlock-media previous
 }
 
 # Play / Pause
 label {
-    text = cmd[update:1000] ~/Singularity/bin/hyprlock-play-pause
+    text = cmd[update:1000] hyprlock-play-pause
 
     font_family = Material Symbols Rounded
     font_size = 24
@@ -129,7 +129,7 @@ label {
     halign = center
     valign = center
 
-    onclick = ~/Singularity/bin/hyprlock-media play-pause
+    onclick = hyprlock-media play-pause
 }
 
 # Next track
@@ -143,7 +143,7 @@ label {
     halign = center
     valign = center
 
-    onclick = ~/Singularity/bin/hyprlock-media next
+    onclick = hyprlock-media next
 }
 
 # INPUT FIELD

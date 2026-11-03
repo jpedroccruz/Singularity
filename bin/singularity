@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
@@ -20,6 +19,12 @@ Usage:
   singularity theme previous
   singularity theme current
   singularity theme list
+
+  singularity wallpaper set <path>
+  singularity wallpaper list [theme]
+  singularity wallpaper current
+  singularity wallpaper next
+  singularity wallpaper previous
 
 Options:
   -h, --help       Show this help message
@@ -46,23 +51,41 @@ main() {
             shift
 
             case "$command" in
-                set)
-                    theme_set "$@"
-                    ;;
-                next)
-                    theme_next "$@"
-                    ;;
-                previous)
-                    theme_previous "$@"
-                    ;;
-                current)
-                    theme_current "$@"
-                    ;;
-                list)
-                    theme_list "$@"
-                    ;;
+                set)      theme_set "$@" ;;
+                next)     theme_next "$@" ;;
+                previous) theme_previous "$@" ;;
+                current)  theme_current "$@" ;;
+                list)     theme_list "$@" ;;
                 *)
                     echo "Error: unknown theme command: $command" >&2
+                    return 2
+                    ;;
+            esac
+            ;;
+
+        wallpaper)
+            shift
+
+            case "${1:-}" in
+                set)
+                    shift
+                    wallpaper_set "$@"
+                    ;;
+                list)
+                    shift
+                    wallpaper_list "$@"
+                    ;;
+                current)
+                    wallpaper_current
+                    ;;
+                next)
+                    wallpaper_next
+                    ;;
+                previous)
+                    wallpaper_previous
+                    ;;
+                *)
+                    echo "Usage: singularity wallpaper {set|list|current|next|previous} [theme]" >&2
                     return 2
                     ;;
             esac
@@ -76,34 +99,6 @@ main() {
             echo "Singularity 0.1.0"
             ;;
 
-    wallpaper)
-        shift
-
-        case "${1:-}" in
-            set)
-                shift
-                wallpaper_set "$@"
-                ;;
-            list)
-                shift
-                wallpaper_list "$@"
-                ;;
-            current)
-                wallpaper_current
-                ;;
-            next)
-                wallpaper_next
-                ;;
-            previous)
-                wallpaper_previous
-                ;;
-            *)
-                echo "Usage: singularity wallpaper {set|list|current|next|previous} [theme]" >&2
-                exit 2
-                ;;
-        esac
-        ;;
-        
         *)
             echo "Error: unknown command: $1" >&2
             usage >&2

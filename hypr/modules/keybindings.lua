@@ -3,7 +3,7 @@
 ---------------------
 
 local mainMod = "SUPER" -- Sets "Windows" key as main modifier
-local media = os.getenv("HOME") .. "/Singularity/bin/hyprlock-media"
+local media = "hyprlock-media"
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
 local closeWindowBind = hl.bind(mainMod .. " + C", function()
@@ -34,9 +34,9 @@ hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("qs ipc call radial toggleThemes"))
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("qs ipc call radial toggleWallpapers"))
 
 -- screenshot
-hl.bind("Print", hl.dsp.exec_cmd("~/Singularity/bin/screenshot output"))
-hl.bind("SHIFT + Print", hl.dsp.exec_cmd("~/Singularity/bin/screenshot region"))
-hl.bind("CTRL + Print", hl.dsp.exec_cmd("~/Singularity/bin/screenshot window"))
+hl.bind("Print", hl.dsp.exec_cmd("screenshot output"))
+hl.bind("SHIFT + Print", hl.dsp.exec_cmd("screenshot region"))
+hl.bind("CTRL + Print", hl.dsp.exec_cmd("screenshot window"))
 
 -- window view
 hl.bind(mainMod .. " + D", hl.dsp.window.float({ action = "toggle" }))

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import re
 import sys
 import tomllib
@@ -8,8 +9,12 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[2]
 THEMES_DIR = ROOT_DIR / "themes"
 TEMPLATES_DIR = ROOT_DIR / "templates"
-CURRENT_DIR = ROOT_DIR / "current"
-QUICKSHELL_DIR = ROOT_DIR / "quickshell"
+
+STATE_HOME = Path(
+    os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")
+)
+
+CURRENT_DIR = STATE_HOME / "singularity" / "current"
 HYPRLOCK_TEMPLATE = TEMPLATES_DIR / "hyprlock.conf.tpl"
 HYPRLOCK_OUTPUT = CURRENT_DIR / "hyprlock.conf"
 SCREENSAVER_TEMPLATE = TEMPLATES_DIR / "screensaver.py.tpl"

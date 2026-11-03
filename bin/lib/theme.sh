@@ -56,7 +56,7 @@ theme_set() {
         return 1
     fi
 
-    if ! python "$SINGULARITY_ROOT/bin/lib/render.py" "$name"; then
+    if ! python3 "$SINGULARITY_ROOT/bin/lib/render.py" "$name"; then
         echo "Error: failed to render theme: $name" >&2
         return 1
     fi

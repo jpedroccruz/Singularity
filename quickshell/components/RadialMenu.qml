@@ -39,11 +39,11 @@ Scope {
 
   // wallpapers de cada tema ficam em <themesRoot>/<nome do tema>/<wallpaperSubdir>
   // (ou defina "dir" num slot para usar outra pasta só para ele)
-  property string themesRoot: Quickshell.env("HOME") + "/Singularity/themes"
+  property string themesRoot: "/usr/share/singularity/themes"
   property string wallpaperSubdir: "backgrounds"
 
   // comando que aplica um backgrounds; o caminho do arquivo entra como último argumento
-  property string wallpaperCmd: "~/Singularity/bin/singularity wallpaper set"
+  property string wallpaperCmd: "singularity wallpaper set"
 
   property var imageFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.avif", "*.bmp", "*.gif"]
 
@@ -57,12 +57,12 @@ Scope {
   property string title: "Themes"
 
   property var slots: [
-    { name: "Igris", icon: "palette", color: "#ff6265", cmd: "~/Singularity/bin/singularity theme set Igris" },
-    { name: "Ion", icon: "palette", color: "#3ca3fe", cmd: "~/Singularity/bin/singularity theme set Ion" },
-    { name: "Lunar", icon: "palette", color: "#d7d7dc", cmd: "~/Singularity/bin/singularity theme set Lunar" },
-    { name: "Nebula", icon: "palette", color: "#c673f8", cmd: "~/Singularity/bin/singularity theme set Nebula" },
-    { name: "Solarius", icon: "palette", color: "#f37523", cmd: "~/Singularity/bin/singularity theme set Solarius" },
-    { name: "Veridian", icon: "palette", color: "#35c884", cmd: "~/Singularity/bin/singularity theme set Veridian" }
+    { name: "Igris", icon: "palette", color: "#ff6265", cmd: "singularity theme set Igris" },
+    { name: "Ion", icon: "palette", color: "#3ca3fe", cmd: "singularity theme set Ion" },
+    { name: "Lunar", icon: "palette", color: "#d7d7dc", cmd: "singularity theme set Lunar" },
+    { name: "Nebula", icon: "palette", color: "#c673f8", cmd: "singularity theme set Nebula" },
+    { name: "Solarius", icon: "palette", color: "#f37523", cmd: "singularity theme set Solarius" },
+    { name: "Veridian", icon: "palette", color: "#35c884", cmd: "singularity theme set Veridian" }
   ]
 
   // ---------- geometria ----------
