@@ -61,6 +61,8 @@ require_project() {
         "$PROJECT_ROOT/kitty" \
         "$PROJECT_ROOT/quickshell" \
         "$PROJECT_ROOT/templates" \
+        "$PROJECT_ROOT/templates/config.jsonc.tpl" \
+        "$PROJECT_ROOT/templates/singularity-logo.txt" \
         "$PROJECT_ROOT/themes" \
         "$PROJECT_ROOT/gtk-themes" \
         "$PROJECT_ROOT/gtk-icons" \
@@ -378,10 +380,17 @@ configure_user() {
         "$CURRENT_DIR/singularity.svg" \
         "$HOME/.config/quickshell/modules/Bar/assets/singularity.svg"
 
-    # Starship também utiliza um arquivo gerado por usuário.
+    # Starship utiliza um arquivo gerado por usuário.
     link_generated_file \
         "$CURRENT_DIR/starship.toml" \
         "$HOME/.config/starship.toml"
+
+    # Fastfetch utiliza uma configuração gerada pelo sistema de temas.
+    mkdir -p "$HOME/.config/fastfetch"
+
+    link_generated_file \
+        "$CURRENT_DIR/config.jsonc" \
+        "$HOME/.config/fastfetch/config.jsonc"
 
     log "Configuração do usuário concluída."
 }

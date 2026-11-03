@@ -15,10 +15,6 @@ STATE_HOME = Path(
 )
 
 CURRENT_DIR = STATE_HOME / "singularity" / "current"
-HYPRLOCK_TEMPLATE = TEMPLATES_DIR / "hyprlock.conf.tpl"
-HYPRLOCK_OUTPUT = CURRENT_DIR / "hyprlock.conf"
-SCREENSAVER_TEMPLATE = TEMPLATES_DIR / "screensaver.py.tpl"
-SCREENSAVER_OUTPUT = CURRENT_DIR / "screensaver.py"
 
 
 def render_template(
@@ -55,7 +51,7 @@ def load_theme_colors(theme_name: str) -> dict:
 
     if not isinstance(accent, str):
         raise ValueError(
-            "A chave 'accent' precisa ser uma string no colors.toml."
+            "A chave 'accent' precisa ser uma string nos colors.toml."
         )
 
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
@@ -172,20 +168,26 @@ def render_quickshell(colors: dict) -> None:
 
 
 def render_hyprlock(colors: dict) -> None:
+    template_file = TEMPLATES_DIR / "hyprlock.conf.tpl"
+    output_file = CURRENT_DIR / "hyprlock.conf"
+
     accent = colors["accent"].lstrip("#")
 
     render_template(
-        HYPRLOCK_TEMPLATE,
-        HYPRLOCK_OUTPUT,
+        template_file,
+        output_file,
         {
             "accent": accent,
         },
     )
 
-    print(f"Hyprlock: {HYPRLOCK_OUTPUT}")
+    print(f"Hyprlock: {output_file}")
 
 
 def render_screensaver(colors: dict) -> None:
+    template_file = TEMPLATES_DIR / "screensaver.py.tpl"
+    output_file = CURRENT_DIR / "screensaver.py"
+
     required_colors = [
         "muted",
         "accent",
@@ -207,18 +209,36 @@ def render_screensaver(colors: dict) -> None:
             + ", ".join(missing_colors)
         )
 
-    if not SCREENSAVER_TEMPLATE.is_file():
+    if not template_file.is_file():
         raise FileNotFoundError(
-            f"Template não encontrado: {SCREENSAVER_TEMPLATE}"
+            f"Template não encontrado: {template_file}"
         )
 
     render_template(
-        SCREENSAVER_TEMPLATE,
-        SCREENSAVER_OUTPUT,
+        template_file,
+        output_file,
         {key: colors[key] for key in required_colors},
     )
 
-    print(f"Screensaver: {SCREENSAVER_OUTPUT}")
+    print(f"Screensaver: {output_file}")
+
+
+def render_fastfetch(colors: dict) -> None:
+    template_file = TEMPLATES_DIR / "config.jsonc.tpl"
+    output_file = CURRENT_DIR / "config.jsonc"
+
+    if not template_file.is_file():
+        raise FileNotFoundError(
+            f"Template não encontrado: {template_file}"
+        )
+
+    render_template(
+        template_file,
+        output_file,
+        {"accent": colors["accent"]},
+    )
+
+    print(f"Fastfetch: {output_file}")
 
 
 def main() -> int:
@@ -244,6 +264,7 @@ def main() -> int:
         render_quickshell(colors)
         render_hyprlock(colors)
         render_screensaver(colors)
+        render_fastfetch(colors)
 
     except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
         print(f"Erro ao renderizar tema: {error}", file=sys.stderr)
