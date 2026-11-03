@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Singularity-Ion
+Comment=An Flat Gtk+ theme based on Elegant Design
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=Singularity-Ion
+MetacityTheme=Singularity-Ion
+IconTheme=Colloid
+CursorTheme=Singularity-Ion-cursors
+ButtonLayout=close,minimize,maximize:menu
