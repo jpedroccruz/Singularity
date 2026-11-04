@@ -129,6 +129,9 @@ PanelWindow {
         Volume {
         }
 
+        Bluetooth {
+        }
+
         Network {
         }
 
