@@ -5,14 +5,14 @@
 hl.config({
     input = {
         kb_layout  = "br",
-        kb_variant = "",
+        kb_variant = "thinkpad",
         kb_model   = "",
         kb_options = "",
         kb_rules   = "",
 
         follow_mouse = 1,
 
-        sensitivity = -0.6, -- -1.0 - 1.0, 0 means no modification.
+        sensitivity = 0.3, -- -1.0 - 1.0, 0 means no modification.
 
         touchpad = {
             natural_scroll = false,

@@ -135,6 +135,9 @@ PanelWindow {
         Monitors {
         }
 
+        Battery {
+        }
+
     }
 
     PanelWindow {
