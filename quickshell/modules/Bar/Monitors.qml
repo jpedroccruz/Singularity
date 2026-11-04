@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
 import Quickshell
@@ -22,6 +23,13 @@ Rectangle {
     property string mode: "extended"
     property string pendingMode: ""
     property string notice: ""
+    property bool hasBrightness: false
+    property int brightnessPercent: 0
+    property bool brightnessDragging: false
+    property bool brightnessApplyPending: false
+    property string brightnessDevice: ""
+    property int brightnessRaw: -1
+    property int brightnessMax: 0
     readonly property bool hasExternal: extMon !== null
     readonly property var activeMonitors: monitors.filter((m) => {
         return !m.disabled;
@@ -270,13 +278,62 @@ Rectangle {
     function refresh() {
         if (!listProcess.running)
             listProcess.running = true;
+    }
 
+    function refreshBrightness() {
+        if (root.brightnessDevice === "") {
+            if (!brightnessReadProcess.running)
+                brightnessReadProcess.running = true;
+            return;
+        }
+
+        brightnessCurrentFile.reload();
+    }
+
+    function updateBrightnessFromFiles() {
+        if (root.brightnessRaw < 0 || root.brightnessMax <= 0)
+            return;
+
+        const percentage = Math.round((root.brightnessRaw / root.brightnessMax) * 100);
+        if (!root.brightnessDragging)
+            root.brightnessPercent = Math.max(0, Math.min(100, percentage));
+    }
+
+    function setBrightnessFromPosition(x, width) {
+        if (width <= 0)
+            return;
+
+        root.brightnessPercent = Math.max(0, Math.min(100, Math.round((x / width) * 100)));
+    }
+
+    function applyBrightness() {
+        if (!root.hasBrightness)
+            return;
+
+        if (brightnessSetProcess.running) {
+            root.brightnessApplyPending = true;
+            return;
+        }
+
+        root.brightnessApplyPending = false;
+        brightnessSetProcess.command = [
+            "brightnessctl",
+            "-q",
+            "-c",
+            "backlight",
+            "s",
+            root.brightnessPercent + "%"
+        ];
+        brightnessSetProcess.running = true;
     }
 
     implicitWidth: indicator.width + 18
     implicitHeight: 30
     color: "transparent"
-    Component.onCompleted: refresh()
+    Component.onCompleted: {
+        refresh();
+        refreshBrightness();
+    }
 
     Process {
         id: listProcess
@@ -287,6 +344,126 @@ Rectangle {
             onStreamFinished: root.parseMonitors(this.text)
         }
 
+    }
+
+    FileView {
+        id: brightnessCurrentFile
+
+        path: root.brightnessDevice === ""
+            ? ""
+            : "/sys/class/backlight/" + root.brightnessDevice + "/brightness"
+        watchChanges: true
+        printErrors: false
+
+        onFileChanged: reload()
+        onLoaded: {
+            const value = Number(text().trim());
+            if (!Number.isFinite(value))
+                return;
+
+            root.brightnessRaw = value;
+            root.updateBrightnessFromFiles();
+        }
+    }
+
+    FileView {
+        id: brightnessMaxFile
+
+        path: root.brightnessDevice === ""
+            ? ""
+            : "/sys/class/backlight/" + root.brightnessDevice + "/max_brightness"
+        printErrors: false
+
+        onLoaded: {
+            const value = Number(text().trim());
+            if (!Number.isFinite(value) || value <= 0)
+                return;
+
+            root.brightnessMax = value;
+            root.updateBrightnessFromFiles();
+        }
+    }
+
+    // O Slider pode perder o binding de `value` quando recebe interação do
+    // usuário. Sincronizamos explicitamente alterações externas de brilho.
+    Connections {
+        target: root
+
+        function onBrightnessPercentChanged(): void {
+            if (!brightnessSlider.pressed)
+                brightnessSlider.value = root.brightnessPercent;
+        }
+    }
+
+    Process {
+        id: brightnessReadProcess
+
+        command: ["brightnessctl", "-m", "-c", "backlight"]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const output = this.text.trim();
+                if (output === "") {
+                    root.hasBrightness = false;
+                    root.brightnessDevice = "";
+                    root.brightnessRaw = -1;
+                    root.brightnessMax = 0;
+                    return;
+                }
+
+                // Formato real do brightnessctl -m:
+                // device,class,brightness,percent,maxbrightness.
+                // Exemplo: intel_backlight,backlight,1939,8%,24242
+                // O percentual está no quarto campo (índice 3).
+                const line = output.split("\n").find((entry) => {
+                    const fields = entry.trim().split(",");
+                    return fields.length >= 4 && fields[1] === "backlight";
+                });
+                const fields = line ? line.trim().split(",") : [];
+                const device = fields.length >= 4 ? fields[0].trim() : "";
+
+                if (device === "") {
+                    root.hasBrightness = false;
+                    root.brightnessDevice = "";
+                    root.brightnessRaw = -1;
+                    root.brightnessMax = 0;
+                    return;
+                }
+
+                root.hasBrightness = true;
+                if (root.brightnessDevice !== device) {
+                    root.brightnessRaw = -1;
+                    root.brightnessMax = 0;
+                    root.brightnessDevice = device;
+                } else {
+                    brightnessCurrentFile.reload();
+                    brightnessMaxFile.reload();
+                }
+            }
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0) {
+                root.hasBrightness = false;
+                root.brightnessDevice = "";
+                root.brightnessRaw = -1;
+                root.brightnessMax = 0;
+            }
+        }
+    }
+
+    Process {
+        id: brightnessSetProcess
+
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                root.showNotice("FALHA AO AJUSTAR BRILHO", 4);
+
+            if (root.brightnessApplyPending)
+                root.applyBrightness();
+            else
+                root.refreshBrightness();
+        }
     }
 
     Process {
@@ -447,6 +624,9 @@ Rectangle {
         readonly property real hf: Math.max(0, Math.min(1, (reveal - 0.1) / 0.9))
 
         onOpenChanged: {
+            if (open)
+                root.refreshBrightness();
+
             revealAnim.stop();
             revealAnim.to = open ? 1 : 0;
             // entra desacelerando; sai acelerando de volta para dentro da barra
@@ -637,9 +817,96 @@ Rectangle {
 
                         }
 
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: root.hasBrightness
+                            spacing: 9
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Text {
+                                    text: "brightness_low"
+                                    color: root.iconColor
+                                    font.family: "Material Symbols Rounded"
+                                    font.pixelSize: 19
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "BRIGHTNESS"
+                                    color: root.iconColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    text: root.brightnessPercent + "%"
+                                    color: root.mutedColor
+                                    font.family: "Rubik"
+                                    font.pixelSize: 12
+                                }
+                            }
+
+                            Slider {
+                                id: brightnessSlider
+
+                                Layout.fillWidth: true
+                                implicitHeight: 30
+                                from: 0
+                                to: 100
+                                Component.onCompleted: value = root.brightnessPercent
+                                onPressedChanged: {
+                                    root.brightnessDragging = pressed;
+                                    if (!pressed)
+                                        root.applyBrightness();
+                                }
+                                onMoved: {
+                                    root.brightnessPercent = Math.round(value);
+                                    root.applyBrightness();
+                                }
+
+                                background: Rectangle {
+                                    x: brightnessSlider.leftPadding
+                                    y: brightnessSlider.topPadding + brightnessSlider.availableHeight / 2 - height / 2
+                                    width: brightnessSlider.availableWidth
+                                    height: 4
+                                    radius: 2
+                                    color: root.borderColor
+
+                                    Rectangle {
+                                        width: brightnessSlider.visualPosition * parent.width
+                                        height: parent.height
+                                        radius: 2
+                                        color: root.iconColor
+                                    }
+                                }
+
+                                handle: Rectangle {
+                                    x: brightnessSlider.leftPadding + brightnessSlider.visualPosition * (brightnessSlider.availableWidth - width)
+                                    y: brightnessSlider.topPadding + brightnessSlider.availableHeight / 2 - height / 2
+                                    width: 14
+                                    height: 14
+                                    radius: width / 2
+                                    color: root.iconColor
+                                    border.width: 2
+                                    border.color: root.panelColor
+                                }
+                            }
+                        }
+
                         Rectangle {
                             Layout.fillWidth: true
-                            visible: root.hasExternal
+                            visible: root.hasBrightness && root.hasExternal
+                            height: 1
+                            color: root.borderColor
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            visible: root.hasExternal && !root.hasBrightness
                             height: 1
                             color: root.borderColor
                         }
