@@ -73,6 +73,12 @@ PanelWindow {
         }
     }
 
+    BatteryAlert {
+        anchors.verticalCenter: clock.verticalCenter
+        anchors.right: clock.left
+        anchors.rightMargin: 12
+    }
+
     Updates {
         anchors.verticalCenter: clock.verticalCenter
         anchors.right: clock.left
