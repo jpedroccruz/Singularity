@@ -1,3 +1,5 @@
+// Alerta de bateria baixa: bateria deitada + ícone "dangerous" piscando + notificação.
+
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -25,15 +27,25 @@ Item {
     property int notifiedLevel: 0
 
     function notify() {
-        notifyProc.command = [
+        let cmd = [
             "notify-send",
+            "--wait",                      // fica aguardando e imprime a ação clicada
             "-a", "Battery",
             "-u", level === 2 ? "critical" : "normal",
-            "-i", "battery-caution",
+            "-i", "battery-caution"
+        ];
+
+        // só oferece o botão se o power-saver ainda não estiver ativo
+        if (PowerProfiles.profile !== PowerProfile.PowerSaver)
+            cmd.push("-A", "powersave=Ativar economia de energia");
+
+        cmd.push(
             level === 2 ? "Bateria crítica" : "Bateria baixa",
             "Restam " + Math.round(pct) + "%. Conecte o carregador."
-        ];
-        notifyProc.running = true;
+        );
+
+        // um processo por notificação, para não bloquear a próxima
+        notifyComp.createObject(root, { command: cmd, running: true });
     }
 
     onLevelChanged: {
@@ -48,8 +60,19 @@ Item {
     implicitWidth: row.implicitWidth
     implicitHeight: row.implicitHeight
 
-    Process {
-        id: notifyProc
+    Component {
+        id: notifyComp
+
+        Process {
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    if (text.trim() === "powersave")
+                        PowerProfiles.profile = PowerProfile.PowerSaver;
+                }
+            }
+
+            onExited: destroy(1000)
+        }
     }
 
     Row {
